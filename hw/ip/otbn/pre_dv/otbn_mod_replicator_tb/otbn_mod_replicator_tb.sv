@@ -25,8 +25,9 @@ module otbn_mod_replicator_tb
   );
 
   // Signals to the dut
-  logic [VLEN-1:0]     mod;
-  elen_bignum_e        elen;
+  logic [VLEN-1:0]  mod;
+  elen_bignum_e     elen;
+  logic [NELEN-1:0] elen_onehot;
 
   // Signals from the dut
   logic [VLEN-1:0]     mod_rep;
@@ -36,9 +37,9 @@ module otbn_mod_replicator_tb
   ///////////////
   // The tested module must be named "dut" (see run.tcl)
   otbn_mod_replicator dut (
-    .mod_i            (mod),
-    .elen_i           (elen),
-    .mod_replicated_o (mod_rep)
+    .mod_i           (mod),
+    .elen_onehot_i   (elen_onehot),
+    .mod_replicated_o(mod_rep)
   );
 
   ///////////////
@@ -55,6 +56,14 @@ module otbn_mod_replicator_tb
              exp_response_queue[$];
 
   integer n_errs, n_checks, all_stim_applied;
+
+  prim_onehot_enc #(
+    .OneHotWidth (NELEN)
+  ) u_elen_onehot (
+    .in_i (elen),
+    .en_i ('1), // always enable
+    .out_o(elen_onehot)
+  );
 
   initial begin : application_block
     response_t gold_response;
