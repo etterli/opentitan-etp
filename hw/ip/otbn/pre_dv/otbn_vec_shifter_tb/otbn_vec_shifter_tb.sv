@@ -29,7 +29,7 @@ module otbn_vec_shifter_tb
   logic [WLEN-1:0]         shifter_in_lower;
   logic                    shift_right;
   logic [$clog2(WLEN)-1:0] shift_amt;
-  elen_bignum_e            elen;
+  logic [WLEN-1:0]         shift_mask;
 
   // Signals from the dut
   logic [WLEN-1:0] shifter_res;
@@ -39,12 +39,12 @@ module otbn_vec_shifter_tb
   ///////////////
   // The tested module must be named "dut" (see run.tcl)
   otbn_vec_shifter dut (
-    .shifter_in_upper_i (shifter_in_upper),
-    .shifter_in_lower_i (shifter_in_lower),
-    .shift_right_i      (shift_right),
-    .shift_amt_i        (shift_amt),
-    .elen_i             (elen),
-    .shifter_res_o      (shifter_res)
+    .shifter_in_upper_i(shifter_in_upper),
+    .shifter_in_lower_i(shifter_in_lower),
+    .shift_right_i     (shift_right),
+    .shift_amt_i       (shift_amt),
+    .vector_mask_i     (shift_mask),
+    .shifter_res_o     (shifter_res)
   );
 
   ///////////////
@@ -89,15 +89,15 @@ module otbn_vec_shifter_tb
       end
 
       unique case (elen_size)
-        16: elen = VecElen16;
-        32: elen = VecElen32;
-        64: elen = VecElen64;
-        128: elen = VecElen128;
-        256: elen = VecElen256;
+        16:  shift_mask = { 16{(( 16'd1 << ( 16-shift_amt)) -  16'd1)}};
+        32:  shift_mask = {  8{(( 32'd1 << ( 32-shift_amt)) -  32'd1)}};
+        64:  shift_mask = {  4{(( 64'd1 << ( 64-shift_amt)) -  64'd1)}};
+        128: shift_mask = {  2{((128'd1 << (128-shift_amt)) - 128'd1)}};
+        256: shift_mask = {256{1'b1}};
         default: $error("Invalid ELEN in golden vector");
       endcase
 
-      $display("Elen %d, ", elen,
+      $display("Elen %d, ", elen_size,
                "upper 0x%h, ", shifter_in_upper,
                "lower 0x%h, ", shifter_in_lower,
                "shift right %d, ", shift_right,
