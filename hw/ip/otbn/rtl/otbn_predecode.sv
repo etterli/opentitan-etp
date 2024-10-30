@@ -70,6 +70,32 @@ module otbn_predecode
   logic [NFlagGroups-1:0] flags_mac_update;
   logic [NFlagGroups-1:0] flags_ispr_wr;
 
+  // The ISA forsees only 4 types of vector element lengths (16, 32, 64 and 128 bits). However,
+  // some regular and vectorized instructions share the hardware and thus we need a 256b type
+  // to signal "regular" 256b operation. We thus first extract the ELEN from the instruction and
+  // then depending on the instruction convert it correctly. Vectorized instructions for the ALU
+  // and MAC have different bits for encoding the ELEN.
+  logic [1:0]       alu_bignum_vec_elen_raw;
+  elen_bignum_e     alu_bignum_vec_elen; // The parsed vector element length incl. the 256b option
+  logic [NELEN-1:0] alu_bignum_vec_elen_onehot;
+
+
+  // Control signal for the vectorized adder to propagate the carry bits depending on the element
+  // length. Each bit controls one vector chunk. Is generated from the parsed vector ELEN.
+  logic [NVecProc-1:0] alu_bignum_vec_adder_carry_sel;
+  // logic [NVecProc-1:0] mac_bignum_vec_adder_carry_sel;
+
+  // Mod output selector control signals
+  logic alu_bignum_vec_mod_selector_en;
+  logic alu_bignum_vec_mod_is_subtraction;
+
+  // Mask for the vectorized shifter. Must be predecoded to have a stable shifting.
+  logic [WLEN-1:0] alu_bignum_vec_shifter_mask;
+
+  // Vector tranposer control signal
+  logic alu_bignum_vec_transposer_en;
+  logic alu_bignum_vec_transposer_is_trn1;
+
   logic mac_bignum_op_en;
   logic mac_bignum_acc_rd_en;
 
@@ -120,9 +146,12 @@ module otbn_predecode
   logic [$clog2(WLEN)-1:0] shift_amt_a_type_bignum;
   // Shift amount for BN.RSHI
   logic [$clog2(WLEN)-1:0] shift_amt_s_type_bignum;
+  // Shift amount for BN.SHV
+  logic [$clog2(WLEN)-1:0] shift_amt_shv_bignum;
 
   assign shift_amt_a_type_bignum = {imem_rdata_i[29:25], 3'b0};
   assign shift_amt_s_type_bignum = {imem_rdata_i[31:25], imem_rdata_i[14]};
+  assign shift_amt_shv_bignum    = {1'b0, imem_rdata_i[26:25], imem_rdata_i[19:15]};
 
   assign flag_group     = imem_rdata_i[31];
   assign flag_group_sel = {(flag_group == 1'b1), (flag_group == 1'b0)};
@@ -132,6 +161,8 @@ module otbn_predecode
   assign flag_sel.Z = flag_e'(imem_rdata_i[26:25]) == FlagZ;
 
   assign flags_keep = ~(flags_adder_update | flags_logic_update | flags_mac_update | flags_ispr_wr);
+
+  assign alu_bignum_vec_elen_raw = imem_rdata_i[29:28];
 
   always_comb begin
     rf_ren_a_base   = 1'b0;
@@ -161,6 +192,13 @@ module otbn_predecode
     flags_logic_update = '0;
     flags_mac_update   = '0;
     flags_ispr_wr      = '0;
+
+    // Default is 256b vector element length (ELEN)
+    alu_bignum_vec_elen               = VecElen256;
+    alu_bignum_vec_mod_selector_en    = 1'b0;
+    alu_bignum_vec_mod_is_subtraction = 1'b0;
+    alu_bignum_vec_transposer_en      = 1'b0;
+    alu_bignum_vec_transposer_is_trn1 = 1'b0;
 
     mac_bignum_op_en     = 1'b0;
     mac_bignum_acc_rd_en = 1'b0;
@@ -317,15 +355,75 @@ module otbn_predecode
             end
             3'b101: begin
               // BN.ADDM/BN.SUBM
-              rf_ren_a_bignum                = 1'b1;
-              rf_ren_b_bignum                = 1'b1;
-              rf_we_bignum                   = 1'b1;
-              alu_bignum_shift_amt           = shift_amt_a_type_bignum;
-              alu_bignum_adder_x_en          = 1'b1;
-              alu_bignum_x_res_operand_a_sel = 1'b1;
-              alu_bignum_shift_mod_sel       = 1'b0;
+              rf_ren_a_bignum                   = 1'b1;
+              rf_ren_b_bignum                   = 1'b1;
+              rf_we_bignum                      = 1'b1;
+              alu_bignum_shift_amt              = '0;
+              alu_bignum_adder_x_en             = 1'b1;
+              alu_bignum_x_res_operand_a_sel    = 1'b1;
+              alu_bignum_shift_mod_sel          = 1'b0;
+              alu_bignum_vec_mod_selector_en    = 1'b1;
+              alu_bignum_vec_mod_is_subtraction = imem_rdata_i[30];
             end
             default: ;
+          endcase
+        end
+
+        ////////////////////////////
+        // Bignum vectorized insn //
+        ////////////////////////////
+        InsnOpcodeBignumVec: begin
+          // Some instructions of this opcode are handled in the Bignum MAC.
+          // 3'b011 is BN.MULV/BN.MULVL
+          // 3'b100 is BN.MULVM/BN.MULVML
+
+          unique case (imem_rdata_i[14:12])
+            3'b000:  begin
+              // BN.ADDV/BN.ADDVM/BN.SUBV/BN.SUBVM (also forseen for BN.ADDVC/BN.SUBVC)
+              rf_ren_a_bignum      = 1'b1;
+              rf_we_bignum         = 1'b1;
+              alu_bignum_vec_elen  = parse_raw_elen(alu_bignum_vec_elen_raw);
+              rf_ren_b_bignum      = 1'b1;
+              alu_bignum_shift_amt = '0;
+
+              if (imem_rdata_i[27]) begin // vectorized MOD operation
+                alu_bignum_adder_x_en             = 1'b1;
+                alu_bignum_x_res_operand_a_sel    = 1'b1;
+                alu_bignum_shift_mod_sel          = 1'b0;
+                alu_bignum_vec_mod_selector_en    = 1'b1;
+                alu_bignum_vec_mod_is_subtraction = imem_rdata_i[30];
+              end else begin // vectorized operation
+                alu_bignum_adder_y_op_a_en       = 1'b1;
+                alu_bignum_adder_y_op_shifter_en = 1'b1;
+                alu_bignum_shifter_b_en          = 1'b1;
+                alu_bignum_shift_amt             = '0;
+              end
+            end
+            3'b101: begin
+              // BN.TRN1/BN.TRN2
+              rf_ren_a_bignum                   = 1'b1;
+              rf_we_bignum                      = 1'b1;
+              alu_bignum_vec_elen               = parse_raw_elen(alu_bignum_vec_elen_raw);
+              rf_ren_b_bignum                   = 1'b1;
+              alu_bignum_vec_transposer_en      = 1'b1;
+              alu_bignum_vec_transposer_is_trn1 = ~imem_rdata_i[30];
+              alu_bignum_shift_amt              = '0;
+            end
+            3'b111: begin
+              // BN.SHV
+              rf_ren_b_bignum         = 1'b1;
+              rf_we_bignum            = 1'b1;
+              alu_bignum_vec_elen     = parse_raw_elen(alu_bignum_vec_elen_raw);
+              alu_bignum_shifter_b_en = 1'b1;
+              alu_bignum_shift_right  = imem_rdata_i[30];
+              alu_bignum_shift_amt    = shift_amt_shv_bignum;
+            end
+            default: ;
+              // 3'b001 foreseen for BN.ADDVI/BN.SUBVI
+              // 3'b010 reserved for future use
+              // 3'b011 is BN.MULV/BN.MULVL
+              // 3'b100 is BN.MULVM/BN.MULVML
+              // 3'b110 is reserved for future use
           endcase
         end
 
@@ -469,7 +567,57 @@ module otbn_predecode
         default: ;
       endcase
     end
+
+    // Generate stabilized control signals depending on the finally selected ELEN for BN ALU
+    //
+    // Vectorized adder:
+    //   Define the carry handling MUX controls depending on ELEN. A bit for each MUX.
+    //   If set: Select carry from previous stage. Else use the external carry.
+    //   The adder 0 always takes the external carry.
+    // Vectorized shifter
+    //   Shift mask depending on the shift_amt and ELEN
+    unique case (alu_bignum_vec_elen) // TODO: Make dynamic depending on VLEN, NVecProc, VChunkLEN
+      VecElen16: begin
+        alu_bignum_vec_adder_carry_sel = {16{1'b1}};
+        // we need a 16b mask. The -1 in the () term defaults to value of at least 32b.
+        // Thus we need to specify the width explicitly
+        alu_bignum_vec_shifter_mask    = { 16{(( 16'd1 << ( 16-alu_bignum_shift_amt)) -  16'd1)}};
+      end
+      VecElen32: begin
+        alu_bignum_vec_adder_carry_sel = {8{2'b01}};
+        // for >=32b the -1 in the () term expands to the correct bit width.
+        // Nonetheless specify it for clarity
+        alu_bignum_vec_shifter_mask    = {  8{(( 32'd1 << ( 32-alu_bignum_shift_amt)) -  32'd1)}};
+      end
+      VecElen64: begin
+        alu_bignum_vec_adder_carry_sel = {4{4'b0001}};
+        alu_bignum_vec_shifter_mask    = {  4{(( 64'd1 << ( 64-alu_bignum_shift_amt)) -  64'd1)}};
+      end
+      VecElen128: begin
+        alu_bignum_vec_adder_carry_sel = {2{8'b0000_0001}};
+        alu_bignum_vec_shifter_mask    = {  2{((128'd1 << (128-alu_bignum_shift_amt)) - 128'd1)}};
+      end
+      VecElen256: begin
+        alu_bignum_vec_adder_carry_sel = 16'd1;
+        alu_bignum_vec_shifter_mask    = {256{1'b1}};
+      end
+      default: begin // TODO: Throw error -> Use assert
+        alu_bignum_vec_adder_carry_sel = '1;
+        alu_bignum_vec_shifter_mask    = {256{1'b1}};
+      end
+    endcase
+
   end
+
+  // ELEN onehot encoded for mod result selection and mod replicator.
+  prim_onehot_enc #(
+    .OneHotWidth (NELEN)
+  ) u_alu_vec_elen_enc (
+    .in_i (alu_bignum_vec_elen),
+    .en_i ('1), // always enable
+    .out_o(alu_bignum_vec_elen_onehot)
+  );
+
 
   always_comb begin
     ispr_addr = IsprMod;
@@ -498,25 +646,32 @@ module otbn_predecode
     end
   end
 
-  assign alu_predec_bignum_o.adder_x_en            = alu_bignum_adder_x_en;
-  assign alu_predec_bignum_o.x_res_operand_a_sel   = alu_bignum_x_res_operand_a_sel;
-  assign alu_predec_bignum_o.adder_y_op_a_en       = alu_bignum_adder_y_op_a_en;
-  assign alu_predec_bignum_o.adder_y_op_shifter_en = alu_bignum_adder_y_op_shifter_en;
-  assign alu_predec_bignum_o.shifter_a_en          = alu_bignum_shifter_a_en;
-  assign alu_predec_bignum_o.shifter_b_en          = alu_bignum_shifter_b_en;
-  assign alu_predec_bignum_o.shift_right           = alu_bignum_shift_right;
-  assign alu_predec_bignum_o.shift_amt             = alu_bignum_shift_amt;
-  assign alu_predec_bignum_o.shift_mod_sel         = alu_bignum_shift_mod_sel;
-  assign alu_predec_bignum_o.logic_a_en            = alu_bignum_logic_a_en;
-  assign alu_predec_bignum_o.logic_shifter_en      = alu_bignum_logic_shifter_en;
-  assign alu_predec_bignum_o.logic_res_sel         = alu_bignum_logic_res_sel;
-  assign alu_predec_bignum_o.flag_group_sel        = flag_group_sel;
-  assign alu_predec_bignum_o.flag_sel              = flag_sel;
-  assign alu_predec_bignum_o.flags_keep            = flags_keep;
-  assign alu_predec_bignum_o.flags_adder_update    = flags_adder_update;
-  assign alu_predec_bignum_o.flags_logic_update    = flags_logic_update;
-  assign alu_predec_bignum_o.flags_mac_update      = flags_mac_update;
-  assign alu_predec_bignum_o.flags_ispr_wr         = flags_ispr_wr;
+  assign alu_predec_bignum_o.adder_x_en             = alu_bignum_adder_x_en;
+  assign alu_predec_bignum_o.x_res_operand_a_sel    = alu_bignum_x_res_operand_a_sel;
+  assign alu_predec_bignum_o.adder_y_op_a_en        = alu_bignum_adder_y_op_a_en;
+  assign alu_predec_bignum_o.adder_y_op_shifter_en  = alu_bignum_adder_y_op_shifter_en;
+  assign alu_predec_bignum_o.shifter_a_en           = alu_bignum_shifter_a_en;
+  assign alu_predec_bignum_o.shifter_b_en           = alu_bignum_shifter_b_en;
+  assign alu_predec_bignum_o.shift_right            = alu_bignum_shift_right;
+  assign alu_predec_bignum_o.shift_amt              = alu_bignum_shift_amt;
+  assign alu_predec_bignum_o.shift_mod_sel          = alu_bignum_shift_mod_sel;
+  assign alu_predec_bignum_o.logic_a_en             = alu_bignum_logic_a_en;
+  assign alu_predec_bignum_o.logic_shifter_en       = alu_bignum_logic_shifter_en;
+  assign alu_predec_bignum_o.logic_res_sel          = alu_bignum_logic_res_sel;
+  assign alu_predec_bignum_o.flag_group_sel         = flag_group_sel;
+  assign alu_predec_bignum_o.flag_sel               = flag_sel;
+  assign alu_predec_bignum_o.flags_keep             = flags_keep;
+  assign alu_predec_bignum_o.flags_adder_update     = flags_adder_update;
+  assign alu_predec_bignum_o.flags_logic_update     = flags_logic_update;
+  assign alu_predec_bignum_o.flags_mac_update       = flags_mac_update;
+  assign alu_predec_bignum_o.flags_ispr_wr          = flags_ispr_wr;
+  assign alu_predec_bignum_o.vec_elen_onehot        = alu_bignum_vec_elen_onehot;
+  assign alu_predec_bignum_o.vec_adder_carry_sel    = alu_bignum_vec_adder_carry_sel;
+  assign alu_predec_bignum_o.vec_mod_selector_en    = alu_bignum_vec_mod_selector_en;
+  assign alu_predec_bignum_o.vec_mod_is_subtraction = alu_bignum_vec_mod_is_subtraction;
+  assign alu_predec_bignum_o.vec_shifter_mask       = alu_bignum_vec_shifter_mask;
+  assign alu_predec_bignum_o.vec_transposer_en      = alu_bignum_vec_transposer_en;
+  assign alu_predec_bignum_o.vec_transposer_is_trn1 = alu_bignum_vec_transposer_is_trn1;
 
   assign mac_predec_bignum_o.op_en     = mac_bignum_op_en;
   assign mac_predec_bignum_o.acc_rd_en = mac_bignum_acc_rd_en;

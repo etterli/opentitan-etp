@@ -42,6 +42,11 @@ filesets:
       - rtl/otbn_rnd.sv
       - rtl/otbn_start_stop_control.sv
       - rtl/otbn_core.sv
+      - rtl/otbn_mod_replicator.sv
+      - rtl/otbn_vec_adder.sv
+      - rtl/otbn_vec_mod_result_selector.sv
+      - rtl/otbn_vec_shifter.sv
+      - rtl/otbn_vec_transposer.sv
     file_type: systemVerilogSource
 
   files_rtl_top:

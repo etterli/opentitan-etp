@@ -309,13 +309,6 @@ package otbn_pkg;
     ImmBaseBX
   } imm_b_sel_base_e;
 
-  // Shift amount select for bignum ISA
-  typedef enum logic [1:0] {
-    ShamtSelBignumA,
-    ShamtSelBignumS,
-    ShamtSelBignumZero
-  } shamt_sel_bignum_e;
-
   // Vector element length type for bignum vec ISA
   // The ISA forsees only 4 types (16 to 128 bits). However, some regular and
   // vectorized instructions share the hardware and thus we need a 256b type
@@ -329,6 +322,17 @@ package otbn_pkg;
     VecElen128 = 3'h3,
     VecElen256 = 3'h4
   } elen_bignum_e;
+
+  function automatic elen_bignum_e parse_raw_elen(logic [1:0] elen_raw);
+    elen_bignum_e elen;
+    unique case (elen_raw)
+      2'b00: elen = VecElen16;
+      2'b01: elen = VecElen32;
+      2'b10: elen = VecElen64;
+      2'b11: elen = VecElen128;
+    endcase
+    return elen;
+  endfunction
 
   // Regfile write data selection
   typedef enum logic [2:0] {
@@ -481,6 +485,9 @@ package otbn_pkg;
     logic                    mac_flag_en;
     alu_op_bignum_e          alu_op;
     op_b_sel_e               alu_op_b_sel;
+    logic [NELEN-1:0]        alu_vec_elen_onehot;
+    logic [NVecProc-1:0]     alu_vec_adder_carry_sel;
+    logic [WLEN-1:0]         alu_vec_shifter_mask;
 
     logic [1:0]              mac_op_a_qw_sel;
     logic [1:0]              mac_op_b_qw_sel;
@@ -524,6 +531,13 @@ package otbn_pkg;
     logic [NFlagGroups-1:0]  flags_logic_update;
     logic [NFlagGroups-1:0]  flags_mac_update;
     logic [NFlagGroups-1:0]  flags_ispr_wr;
+    logic [NELEN-1:0]        vec_elen_onehot;
+    logic [NVecProc-1:0]     vec_adder_carry_sel;
+    logic                    vec_mod_selector_en;
+    logic                    vec_mod_is_subtraction;
+    logic [WLEN-1:0]         vec_shifter_mask;
+    logic                    vec_transposer_en;
+    logic                    vec_transposer_is_trn1;
   } alu_predec_bignum_t;
 
   typedef struct packed {
@@ -563,6 +577,9 @@ package otbn_pkg;
     logic [WLEN-1:0]         operand_b;
     logic                    shift_right;
     logic [$clog2(WLEN)-1:0] shift_amt;
+    logic [NELEN-1:0]        vec_elen_onehot;
+    logic [NVecProc-1:0]     vec_adder_carry_sel;
+    logic [WLEN-1:0]         vec_shifter_mask;
     flag_group_t             flag_group;
     flag_e                   sel_flag;
     logic                    alu_flag_en;
