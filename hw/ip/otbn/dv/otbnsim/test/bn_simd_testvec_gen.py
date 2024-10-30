@@ -2,8 +2,6 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-import numpy as np
-
 '''Tool to generate vectors and results to test the OTBN SIMD instructions.
 
 Prints vectors to console and dumps OTBN assemlby formatted data section for each
