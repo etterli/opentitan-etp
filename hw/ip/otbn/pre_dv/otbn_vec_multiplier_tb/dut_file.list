@@ -1,0 +1,22 @@
++incdir+../../prim/rtl
++incdir+../../otp_ctrl/rtl
++incdir+../../lc_ctrl/rtl
+
+# Dependencies for otbn_pkg.sv
+../../prim/rtl/prim_util_pkg.sv
+../../prim/rtl/prim_mubi_pkg.sv
+../../prim_generic/rtl/prim_generic_and2.sv
+../../../vendor/lowrisc_ibex/dv/uvm/core_ibex/common/prim/prim_and2.sv
+../../prim/rtl/prim_onehot_mux.sv
+../../lc_ctrl/rtl/lc_ctrl_reg_pkg.sv
+../../lc_ctrl/rtl/lc_ctrl_state_pkg.sv
+../../lc_ctrl/rtl/lc_ctrl_pkg.sv
+../../otp_ctrl/rtl/otp_ctrl_reg_pkg.sv
+../../otp_ctrl/rtl/otp_ctrl_pkg.sv
+../../prim/rtl/prim_secded_pkg.sv
+
+../rtl/otbn_pkg.sv
+
+../../prim/rtl/prim_assert_standard_macros.svh
+
+../rtl/otbn_vec_multiplier.sv
