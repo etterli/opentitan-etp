@@ -21,7 +21,8 @@ Inputs:
 - `a = 'b0`, `b = 'b0`
 - `carries_in = 'b1`. All ones. Some should be multiplexed (ignored) to use the proceeding adder's carry out.
 - `operand_b_invert = 0`
-- elen = all possible values
+- `elen` = all possible values
+- `vlen` = 256, 128
 
 Expected output:
 - `sum`: each element should be `= 1`
@@ -36,7 +37,8 @@ Inputs:
 - a, b such that each adder has an overflow. `a = {16{16hFFFF}}`, `b = {16{16h2}}`
 - `carries_in`: For `ELEN != 16`: Each 2nd carry of each element is set. For `ELEN = 16` all carries are zero.
 - `operand_b_invert = 0`
-- elen = all possible values
+- `elen` = all possible values
+- `vlen` = 256, 128
 
 Expected output:
 - `sum`: each element should be `== 1`
@@ -52,6 +54,7 @@ Inputs:
 - `carries_in = 'b1`
 - `operand_b_invert = 1`
 - `elen` = all possible values
+- `vlen` = 256, 128
 
 Expected output:
 - `sum`: the correct numerical result
@@ -74,7 +77,8 @@ Inputs:
 - `b`: a random number with `0 < a < b && b > 3/4 * (2**ELEN)`.
 - `carries_in = 'b1`
 - `operand_b_invert = 1`
-- elen = all possible values
+- `elen` = all possible values
+- `vlen` = 256, 128
 
 Expected output:
 - `sum`: the correct numerical result
@@ -92,13 +96,14 @@ Expected output:
 All testcases inputs and outputs are defined in the `otbn_vec_adder.golden` file.
 Each line of the file has the following format and represents a testcase.
 ```
-<elen>, 0x<a>, 0x<b>, 0x<cin>, <op_b_invert>, 0x<sum>, 0x<cout>
+<vlen>, <elen>, 0x<a>, 0x<b>, 0x<cin>, <op_b_invert>, 0x<sum>, 0x<cout>
 ```
 where
-- `<elen>`: one of `16, 32, 64, 128, 256`
-- `<a>`: input vector `a` as `256'hxx...` (0x is expected)
-- `<b>`: input vector `b` as `256'hxx...` (0x is expected)
-- `<cin>`: input carries as `16'hxxxx` (0x is expected)
+- `<vlen>`: one of `128, 256`
+- `<elen>`: one of `16, 32, 64, 128 [, 256]`
+- `<a>`: input vector `a` as `[128, 256]'hxx...` (0x is expected)
+- `<b>`: input vector `b` as `[128, 256]'hxx...` (0x is expected)
+- `<cin>`: input carries as `[8, 16]'hxxxx` (0x is expected)
 - `<op_b_invert>`: `0` for noninverting, `1` for inverting
-- `<sum>`: the expected sum as `256'hxx...` (0x is expected)
-- `<cout>`: the exected carries out as `16'hxxxx` (0x is expected)
+- `<sum>`: the expected sum as `[128, 256]'hxx...` (0x is expected)
+- `<cout>`: the exected carries out as `[8, 16]'hxxxx` (0x is expected)
