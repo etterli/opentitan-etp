@@ -14,11 +14,30 @@ module prim_generic_flop #(
   output logic [Width-1:0] q_o
 );
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      q_o <= ResetValue;
-    end else begin
-      q_o <= d_i;
+  // always_ff @(posedge clk_i or negedge rst_ni) begin
+  //   if (!rst_ni) begin
+  //     q_o <= ResetValue;
+  //   end else begin
+  //     q_o <= d_i;
+  //   end
+  // end
+
+  // Replacing with tech specific cell reference
+  for (genvar i = 0; i < Width; i++) begin : g_flop_gen
+    if (ResetValue[i] == 1'b0) begin : g_flop_gen_low_reset
+      tc_flop_async_low_reset i_flop_reset (
+        .clk_i (clk_i ),
+        .d_i   (d_i[i]),
+        .rst_ni(rst_ni),
+        .q_o   (q_o[i])
+      );
+    end else begin : g_flop_gen_low_set
+      tc_flop_async_low_set i_flop_set (
+        .clk_i (clk_i ),
+        .d_i   (d_i[i]),
+        .set_ni(rst_ni),
+        .q_o   (q_o[i])
+      );
     end
   end
 
