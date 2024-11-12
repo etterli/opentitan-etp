@@ -108,6 +108,7 @@ module otbn_controller
   // Bignum MAC
   output mac_bignum_operation_t mac_bignum_operation_o,
   input  logic [WLEN-1:0]       mac_bignum_operation_result_i,
+  input  logic                  mac_bignum_operation_valid_i,
   output logic                  mac_bignum_en_o,
   output logic                  mac_bignum_commit_o,
 
@@ -204,6 +205,7 @@ module otbn_controller
   logic ispr_stall;
   logic mem_stall;
   logic rf_indirect_stall;
+  logic mac_bignum_stall;
   logic jump_or_branch;
   logic branch_taken;
   logic insn_executing;
@@ -377,7 +379,13 @@ module otbn_controller
                               insn_dec_bignum_i.rf_b_indirect |
                               insn_dec_bignum_i.rf_d_indirect);
 
-  assign stall = mem_stall | ispr_stall | rf_indirect_stall;
+  // Stall while a vectorized multicycle MAC calculation is ongoing
+  assign mac_bignum_stall = insn_valid_i &
+                            (insn_dec_shared_i.subset == InsnSubsetBignum) &
+                            insn_dec_bignum_i.mac_en &
+                            (~mac_bignum_operation_valid_i);
+
+  assign stall = mem_stall | ispr_stall | rf_indirect_stall | mac_bignum_stall;
 
   // OTBN is done when it was executing something (in state OtbnStateRun or OtbnStateStall)
   // and either it executes an ecall or an error occurs. A pulse on the done signal raises the
@@ -957,6 +965,15 @@ module otbn_controller
   // one-hot versions are. The predecoded versions get checked against the signals produced here.
   // Buffer them to ensure they don't get optimised away (with a functionaly correct OTBN they will
   // always be identical).
+  // The read enable is only asserted if the instruction is actually using the data i.e. the
+  // instruction is not stalling. This is fine for all instructions except the vectorized
+  // multiplications instructions as these are multi cycle and stall during the computation. We
+  // thus overwrite the read enable for any bignum MAC instruction. This works as none of these
+  // instructions can trigger any of the other stall sources (mem_stall, ispr_stall or
+  // rf_indirect_stall). The only possible stall reason is the MAC module itself.
+  logic rf_bignum_rd_en_stall;
+  assign rf_bignum_rd_en_stall = insn_dec_bignum_i.mac_en ? 1'b0 : stall;
+
   assign rf_bignum_rd_addr_a_unbuf = insn_dec_bignum_i.rf_a_indirect ? insn_bignum_rd_addr_a_q :
                                                                        insn_dec_bignum_i.a;
 
@@ -967,7 +984,9 @@ module otbn_controller
     .out_o(rf_bignum_rd_addr_a_o)
   );
 
-  assign rf_bignum_rd_en_a_unbuf = insn_dec_bignum_i.rf_ren_a & insn_valid_i & ~stall;
+  assign rf_bignum_rd_en_a_unbuf = insn_dec_bignum_i.rf_ren_a &
+                                   insn_valid_i               &
+                                   ~rf_bignum_rd_en_stall;
 
   prim_buf #(
     .Width(1)
@@ -986,7 +1005,9 @@ module otbn_controller
     .out_o(rf_bignum_rd_addr_b_o)
   );
 
-  assign rf_bignum_rd_en_b_unbuf = insn_dec_bignum_i.rf_ren_b & insn_valid_i & ~stall;
+  assign rf_bignum_rd_en_b_unbuf = insn_dec_bignum_i.rf_ren_b &
+                                   insn_valid_i               &
+                                   ~rf_bignum_rd_en_stall;
 
   prim_buf #(
     .Width(1)
@@ -1028,6 +1049,10 @@ module otbn_controller
   assign mac_bignum_operation_o.pre_acc_shift_imm = insn_dec_bignum_i.mac_pre_acc_shift;
   assign mac_bignum_operation_o.zero_acc          = insn_dec_bignum_i.mac_zero_acc;
   assign mac_bignum_operation_o.shift_acc         = insn_dec_bignum_i.mac_shift_out;
+  assign mac_bignum_operation_o.mul_type          = insn_dec_bignum_i.mac_mul_type;
+  assign mac_bignum_operation_o.vec_elen_onehot   = insn_dec_bignum_i.mac_vec_elen_onehot;
+  // TODO: add missing control signals (must be generated first)
+  assign mac_bignum_operation_o.lane_index        = insn_dec_bignum_i.mac_lane_index;
 
   assign mac_bignum_en_o     = insn_valid_i & insn_dec_bignum_i.mac_en;
   assign mac_bignum_commit_o = insn_executing;
@@ -1071,8 +1096,23 @@ module otbn_controller
 
     // Only write if valid instruction wants a bignum rf write and it isn't stalled. If instruction
     // doesn't execute (e.g. due to an error) the write won't commit.
+
+    // !!!!!!!!!!!!!!!!!
+    // !!! IMPORTANT !!!
+    // !!!!!!!!!!!!!!!!!
+    // If a multicycle MAC insn is active, write to WDR in each cycle to avoid predecoded signal
+    // missmatch. This destroys the architectural state before commiting the instruction and
+    // creates a huge limitation!
+    // -> Any source WDR MAY NOT be the destination WDR as it would be overwritten during
+    // the computation leading to incorrect results! TODO: Fix the WDR destination limitation.
+    // In case of an error the destination WDR is altered. However, on any error we perform an
+    // Internal State Secure Wipe which wipes all GPRs and WDRs. Therefore, this behaviour is
+    // acceptable. However, it would be cleaner to implement predecoding modifications similarly
+    // to an indirect access.
+    // TODO: Handle MAC write enable similarly as indirect WDR access and use mac_bignum_stall
     if (insn_valid_i && insn_dec_bignum_i.rf_we && !rf_indirect_stall) begin
-      if (insn_dec_bignum_i.mac_en && insn_dec_bignum_i.mac_shift_out) begin
+      if (insn_dec_bignum_i.mac_en && insn_dec_bignum_i.mac_shift_out &&
+          !insn_dec_bignum_i.mac_is_vec) begin
         // Special handling for BN.MULQACC.SO, only enable upper or lower half depending on
         // mac_wr_hw_sel_upper.
         rf_bignum_wr_en_unbuf = insn_dec_bignum_i.mac_wr_hw_sel_upper ? 2'b10 : 2'b01;
@@ -1164,7 +1204,8 @@ module otbn_controller
   // through unchanged as write data.
   assign mac_bignum_rf_wr_data[WLEN-1:WLEN/2] =
       insn_dec_bignum_i.mac_wr_hw_sel_upper &&
-      insn_dec_bignum_i.mac_shift_out          ? mac_bignum_operation_result_i[WLEN/2-1:0] :
+      insn_dec_bignum_i.mac_shift_out       &&
+      !insn_dec_bignum_i.mac_is_vec            ? mac_bignum_operation_result_i[WLEN/2-1:0] :
                                                  mac_bignum_operation_result_i[WLEN-1:WLEN/2];
 
   assign mac_bignum_rf_wr_data[WLEN/2-1:0] = mac_bignum_operation_result_i[WLEN/2-1:0];

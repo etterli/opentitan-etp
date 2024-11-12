@@ -75,13 +75,18 @@ module otbn_decoder
   comparison_op_base_e comparison_operator_base;
 
 
-  logic [1:0] mac_op_a_qw_sel_bignum;
-  logic [1:0] mac_op_b_qw_sel_bignum;
-  logic       mac_wr_hw_sel_upper_bignum;
-  logic [1:0] mac_pre_acc_shift_bignum;
-  logic       mac_zero_acc_bignum;
-  logic       mac_shift_out_bignum;
-  logic       mac_en_bignum;
+  logic [1:0]       mac_op_a_qw_sel_bignum;
+  logic [1:0]       mac_op_b_qw_sel_bignum;
+  logic             mac_wr_hw_sel_upper_bignum;
+  logic [1:0]       mac_pre_acc_shift_bignum;
+  logic             mac_zero_acc_bignum;
+  logic             mac_shift_out_bignum;
+  logic             mac_en_bignum;
+  logic             mac_is_vec_bignum;
+  mac_mul_type_e    mac_mul_type_bignum;
+  elen_bignum_e     mac_vec_elen;
+  logic [NELEN-1:0] mac_vec_elen_onehot;
+  logic [3:0]       mac_lane_index;
 
   logic rf_ren_a_base;
   logic rf_ren_b_base;
@@ -190,6 +195,15 @@ module otbn_decoder
   assign mac_pre_acc_shift_bignum   = insn[14:13];
   assign mac_zero_acc_bignum        = insn[12];
   assign mac_shift_out_bignum       = insn[30];
+  assign mac_lane_index             = insn[31:28];
+
+  prim_onehot_enc #(
+    .OneHotWidth (NELEN)
+  ) u_mac_elen_bignum_vec_enc (
+    .in_i (mac_vec_elen),
+    .en_i ('1), // always enable
+    .out_o(mac_vec_elen_onehot)
+  );
 
   logic d_inc_bignum;
   logic a_inc_bignum;
@@ -283,6 +297,10 @@ module otbn_decoder
     mac_zero_acc:            mac_zero_acc_bignum,
     mac_shift_out:           mac_shift_out_bignum,
     mac_en:                  mac_en_bignum,
+    mac_is_vec:              mac_is_vec_bignum,
+    mac_mul_type:            mac_mul_type_bignum,
+    mac_vec_elen_onehot:     mac_vec_elen_onehot,
+    mac_lane_index:          mac_lane_index,
     rf_we:                   rf_we_bignum,
     rf_wdata_sel:            rf_wdata_sel_bignum,
     rf_ren_a:                rf_ren_a_bignum,
@@ -322,6 +340,10 @@ module otbn_decoder
     rf_ren_a_bignum        = 1'b0;
     rf_ren_b_bignum        = 1'b0;
     mac_en_bignum          = 1'b0;
+    mac_is_vec_bignum      = 1'b0;
+    mac_mul_type_bignum    = MacMulRegular;
+    // Default we multiply two 64b values and add 256b values
+    mac_vec_elen           = VecElen64;
 
     rf_a_indirect_bignum   = 1'b0;
     rf_b_indirect_bignum   = 1'b0;
@@ -550,9 +572,9 @@ module otbn_decoder
       // Bignum ALU vectorized insn //
       ////////////////////////////////
       InsnOpcodeBignumVec: begin
-        // Some instructions of this opcode are handled in the Bignum MAC.
-        // 3'b011 is BN.MULV/BN.MULVL
-        // 3'b100 is BN.MULVM/BN.MULVML
+        // Following instructions of this opcode are handled in the Bignum MAC.
+        // - 3'b011 is BN.MULV/BN.MULVL
+        // - 3'b100 is BN.MULVM/BN.MULVML
         unique case (insn[14:12])
           3'b000:  begin
             // BN.ADDV/BN.ADDVM/BN.SUBV/BN.SUBVM (also forseen for BN.ADDVC/BN.SUBVC)
@@ -574,13 +596,55 @@ module otbn_decoder
             rf_ren_b_bignum = 1'b1;
             rf_we_bignum    = 1'b1;
           end
+          3'b011: begin
+            // BN.MULV/BN.MULVL
+            insn_subset         = InsnSubsetBignum;
+            rf_ren_a_bignum     = 1'b1;
+            rf_ren_b_bignum     = 1'b1;
+            rf_we_bignum        = 1'b1;
+            rf_wdata_sel_bignum = RfWdSelMac;
+            mac_en_bignum       = 1'b1;
+            mac_is_vec_bignum   = 1'b1;
+
+            mac_vec_elen = parse_raw_elen(insn[27:26]);
+
+            mac_mul_type_bignum = MacMulVec;
+            if (insn[25]) begin
+              mac_mul_type_bignum = MacMulVecLane;
+            end
+
+            // This supports only 16b and 32b ELEN
+            if (!((mac_vec_elen == VecElen16) || (mac_vec_elen == VecElen32))) begin
+              illegal_insn = 1'b1;
+            end
+          end
+          3'b100: begin
+            // BN.MULVM/BN.MULVML
+            insn_subset         = InsnSubsetBignum;
+            rf_ren_a_bignum     = 1'b1;
+            rf_ren_b_bignum     = 1'b1;
+            rf_we_bignum        = 1'b1;
+            rf_wdata_sel_bignum = RfWdSelMac;
+            mac_en_bignum       = 1'b1;
+            mac_is_vec_bignum   = 1'b1;
+
+            mac_vec_elen = parse_raw_elen(insn[27:26]);
+
+            mac_mul_type_bignum = MacMulVecMod;
+            if (insn[25]) begin
+              mac_mul_type_bignum = MacMulVecModLane;
+            end
+
+            // This supports only 16b and 32b ELEN
+            if (!((mac_vec_elen == VecElen16) || (mac_vec_elen == VecElen32))) begin
+              illegal_insn = 1'b1;
+            end
+          end
           // unused / illegal instructions
           3'b001, // foreseen for BN.ADDVI/BN.SUBVI
           3'b010, // reserved for future use
           3'b110: illegal_insn = 1'b1; // reserved for future use
-          default: ;
-            // 3'b011 is BN.MULV/BN.MULVL
-            // 3'b100 is BN.MULVM/BN.MULVML
+          default: illegal_insn = 1'b1;
         endcase
       end
 
@@ -731,7 +795,7 @@ module otbn_decoder
       ////////////////////////////////////////////
       // BN.MULQACC/BN.MULQACC.WO/BN.MULQACC.SO //
       ////////////////////////////////////////////
-
+      // Some MAC operations are handled in InsnOpcodeBignumVec
       InsnOpcodeBignumMulqacc: begin
         insn_subset         = InsnSubsetBignum;
         rf_ren_a_bignum     = 1'b1;
