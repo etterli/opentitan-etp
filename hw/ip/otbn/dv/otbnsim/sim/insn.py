@@ -9,6 +9,7 @@ from .flags import FlagReg
 from .isa import (OTBNInsn, RV32RegReg, RV32RegImm,
                   RV32ImmShift, insn_for_mnemonic, logical_byte_shift,
                   extract_quarter_word,
+                  montgomery_mul,
                   extract_simd_element_size,
                   extract_sub_word,
                   # extract_sub_word_signed,
@@ -1521,27 +1522,98 @@ class BNMULVM(OTBNInsn):
         self.wrs1 = op_vals['wrs1']
         self.wrs2 = op_vals['wrs2']
 
-    def execute(self, state: OTBNState) -> None:
+    def execute(self, state: OTBNState) -> Optional[Iterator[None]]:
         vec_a = state.wdrs.get_reg(self.wrs1).read_unsigned()
         vec_b = state.wdrs.get_reg(self.wrs2).read_unsigned()
         size = extract_simd_element_size(self.datatype)
 
-        # TODO: match HW implementation regarding cycles
+        # The RTL implementation uses the Montgomery algorithm to perform the modulo reduction.
+        # Inputs:
+        # - a, b: Operands in [0, q[ in Montgomery space
+        # - d:   Bitwith of operands
+        # - q:   Modulus in ]0, 2^d]
+        # - R:   Montgomery constant, precomputed, R = (-q)^(-1) mod 2^d
+        # Outputs:
+        # - r = a*b mod q and r in [0,q[ in Montgomery space
+        # - c = a*b
+        #
+        # The inputs however must be pretransformed into Montgomery space: a_ = a * 2^d mod q
+        #
+        # Algorithm (where []_d are the lower d bits, []^d are the higher d bits)
+        #   r = [c + [[c]_d * R]_d * q]^d
+        #   if r >= q then
+        #       return r - q
+        #   return r
+        #
+        # To save resources the MAC multiplier is reused and thus the calculations has to be
+        # split over multiple cycles. The instruction requires 12 cycles in total where each
+        # 64b part (i.e. four 16b or two 32b elements) is processed in 3 cycles.
+        # Cycle 0:  Reg(Tmp) = 0, Reg(C) = 0
+        # Cycle 1:  Reg(Tmp) = [a*b]_d,     Reg(C) = a*b
+        # Cycle 2:  Reg(Tmp) = [Tmp*R]_d,   Reg(C) = a*b
+        # Cycle 3:  Output   = c + (Tmp)*q mod q = [c + (Tmp)*q]^d (-q)
+        #
+        # The required constants q and R are expected to be in the MOD WSR at following locations:
+        # For 16b: q @ [15:0], R @ [47:32]
+        # For 32b: q @ [31:0], R @ [63:32]
+        # 64b and 128b operations are not suppored in RTL. However, for simulator purposes we
+        # implement the functionality already. The constants are expected at:
+        # For  64b: q @ [63:0], R @ [127:64]
+        # For 128b: q @ [127:0], R @ [255:128]
+        #
+        # To simplify the simulator implementation we first compute the result and then emulate
+        # the register update sequence. We do model only the ACC updates. We do not model the MAC's
+        # internal registers tmp and c.
         result = 0
-        mod_val = state.wsrs.MOD.read_unsigned()  # CHECK: do only extract size bits?
+
+        # extract the Montgomery constants q and R
+        mod_raw = state.wsrs.MOD.read_unsigned()
+        mod_offset = 32 if (size == 16 or size == 32) else size
+        mod_q = mod_raw & ((1 << size) - 1)
+        mod_R = (mod_raw >> mod_offset) & ((1 << size) - 1)
+
         for elem in range(256 // size - 1, -1, -1):
-            elem_a = extract_sub_word(vec_a, size, elem)
-            elem_b = extract_sub_word(vec_b, size, elem)
+            elem_a = extract_sub_word(vec_a, size, elem)  # in Montgomery space
+            elem_b = extract_sub_word(vec_b, size, elem)  # in Montgomery space
 
-            elem_c = elem_a * elem_b
+            # Preconditions for Montgomery reduction
+            assert (mod_q > 0) and (mod_q < 2**size)
 
-            # TODO: match HW implementation
-            elem_c = elem_c % mod_val
+            # Montgomery computation
+            elem_c = montgomery_mul(elem_a, elem_b, mod_q, mod_R, size)
 
             elem_c = elem_c & ((1 << size) - 1)
             result = (result << size) | elem_c
 
         result = result & ((1 << 256) - 1)
+
+        # Emulate the register usage. We do not model registers TMP and C.
+        # One 64b chunk computation requires 3 cycles. We perform the following register accesses
+        # Cycle    1: TMP and C are written
+        # Cycle    2: TMP is written, ACC and C unused
+        # Cycle    3: ACC is read and written, TMP and C are read
+        #
+        # We now repeat these 3 cycles for all four 64b chunks (quarter words).
+        # For the first QWord we don't read the ACC as it is cleared to all zeros.
+        # In cycle 12 we also write the result to the destination WDR
+        qword_mask = (1 << 64) - 1
+        # Cycle 1-3
+        yield None
+        yield None
+        acc = 0
+        acc |= result & qword_mask
+        acc = state.wsrs.ACC.write_unsigned(acc)
+        # Cycle 4-12
+        for qword in range(1, 4):
+            yield None
+            yield None
+            yield None
+            acc = state.wsrs.ACC.read_unsigned()
+            current_qword_mask = (((1 << 256) - 1) & (qword_mask << (qword * 64)))
+            acc = acc & ~current_qword_mask  # delete the to be replaced qw
+            acc |= result & current_qword_mask
+            acc = state.wsrs.ACC.write_unsigned(acc)
+
         state.wdrs.get_reg(self.wrd).write_unsigned(result)
 
 
@@ -1556,27 +1628,54 @@ class BNMULVML(OTBNInsn):
         self.wrs2 = op_vals['wrs2']
         self.lane = op_vals['lane']
 
-    def execute(self, state: OTBNState) -> None:
+    def execute(self, state: OTBNState) -> Optional[Iterator[None]]:
         vec_a = state.wdrs.get_reg(self.wrs1).read_unsigned()
         vec_b = state.wdrs.get_reg(self.wrs2).read_unsigned()
         size = extract_simd_element_size(self.datatype)
 
-        # TODO: match HW implementation regarding cycles
+        # See comment in BNMULVM for explanation
         result = 0
-        mod_val = state.wsrs.MOD.read_unsigned()  # CHECK: do only extract size bits?
+
+        # extract the Montgomery constants q and R
+        mod_raw = state.wsrs.MOD.read_unsigned()
+        mod_offset = 32 if (size == 16 or size == 32) else size
+        mod_q = mod_raw & ((1 << size) - 1)
+        mod_R = (mod_raw >> mod_offset) & ((1 << size) - 1)
+
         lane_elem = extract_sub_word(vec_b, size, self.lane)
         for elem in range(256 // size - 1, -1, -1):
             elem_a = extract_sub_word(vec_a, size, elem)
 
-            elem_c = elem_a * lane_elem
+            # Preconditions for Montgomery reduction
+            assert (mod_q > 0) and (mod_q < 2**size)
 
-            # TODO: match HW implementation
-            elem_c = elem_c % mod_val
+            # Montgomery computation
+            elem_c = montgomery_mul(elem_a, lane_elem, mod_q, mod_R, size)
 
             elem_c = elem_c & ((1 << size) - 1)
             result = (result << size) | elem_c
 
         result = result & ((1 << 256) - 1)
+
+        # Emulate the register usage. See BN.MULVM for details
+        qword_mask = (1 << 64) - 1
+        # Cycle 1-3
+        yield None
+        yield None
+        acc = 0
+        acc |= result & qword_mask
+        acc = state.wsrs.ACC.write_unsigned(acc)
+        # Cycle 4-12
+        for qword in range(1, 4):
+            yield None
+            yield None
+            yield None
+            acc = state.wsrs.ACC.read_unsigned()
+            current_qword_mask = (((1 << 256) - 1) & (qword_mask << (qword * 64)))
+            acc = acc & ~current_qword_mask  # delete the to be replaced qw
+            acc |= result & current_qword_mask
+            acc = state.wsrs.ACC.write_unsigned(acc)
+
         state.wdrs.get_reg(self.wrd).write_unsigned(result)
 
 
