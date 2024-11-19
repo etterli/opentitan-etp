@@ -21,7 +21,7 @@ module otbn_core
   // Size of the instruction memory, in bytes
   parameter int ImemSizeByte = 4096,
   // Size of the data memory, in bytes
-  parameter int DmemSizeByte = 4096,
+  parameter int DmemSizeByte = 32768,
 
   // Default seed for URND PRNG
   parameter urnd_prng_seed_t RndCnstUrndPrngSeed = RndCnstUrndPrngSeedDefault,

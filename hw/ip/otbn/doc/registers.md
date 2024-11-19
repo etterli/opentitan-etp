@@ -17,7 +17,7 @@
 | otbn.[`INSN_CNT`](#insn_cnt)                   | 0x24     |        4 | Instruction Count Register                      |
 | otbn.[`LOAD_CHECKSUM`](#load_checksum)         | 0x28     |        4 | A 32-bit CRC checksum of data written to memory |
 | otbn.[`IMEM`](#imem)                           | 0x4000   |     8192 | Instruction Memory Access                       |
-| otbn.[`DMEM`](#dmem)                           | 0x8000   |     3072 | Data Memory Access                              |
+| otbn.[`DMEM`](#dmem)                           | 0x8000   |    31744 | Data Memory Access                              |
 
 ## INTR_STATE
 Interrupt State Register
@@ -319,11 +319,11 @@ are ignored.
 If OTBN is busy, any access additionally triggers an
 ILLEGAL_BUS_ACCESS fatal error.
 
-Note that DMEM is actually 4kiB in size, but only the first 3kiB of
+Note that DMEM is actually 32kiB in size, but only the first 31kiB of
 the memory is visible through this register interface.
 
-- Word Aligned Offset Range: `0x8000`to`0x8bfc`
-- Size (words): `768`
+- Word Aligned Offset Range: `0x8000`to`0x17BFC`
+- Size (words): `7936`
 - Access: `rw`
 - Byte writes are *not* supported.
 
