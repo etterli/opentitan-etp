@@ -4,6 +4,8 @@
 
 `include "prim_assert.sv"
 
+// Prevent Vivado from performing optimizations on/across this module.
+(* DONT_TOUCH = "yes" *)
 module prim_flop_en #(
   parameter int               Width      = 1,
   parameter bit               EnSecBuf   = 0,
