@@ -2,6 +2,14 @@
 /* Licensed under the Apache License, Version 2.0, see LICENSE for details. */
 /* SPDX-License-Identifier: Apache-2.0 */
 
+/*
+  NOTE!
+  The result are nonsense because both inputs are in the Montgomery space.
+  If one input would be in original space the result would make sense.
+  However, the RTL only implements a montgomery multiplication and no extra
+  reduction afterwards. Nonetheless, the implementation can be tested this way.
+*/
+
 .section .text.start
 /*
   Testing each lane results in 30 results.
