@@ -34,6 +34,15 @@ otbn_sim_test(
 )
 
 otbn_sim_test(
+    name = "ntt_mldsa_exp_reduction_test",
+    srcs = [
+        "ntt_mldsa_exp_reduction_test.s",
+    ],
+    exp = "ntt_mldsa_exp_reduction_test.exp",
+    deps = ["//sw/otbn/ntt:ntt_mldsa_exp_reduction"],
+)
+
+otbn_sim_test(
     name = "intt_mldsa_test",
     srcs = [
         "intt_mldsa_test.s",

@@ -28,6 +28,13 @@ otbn_library(
 )
 
 otbn_library(
+    name = "ntt_mldsa_exp_reduction",
+    srcs = [
+        "ntt_mldsa_exp_reduction.s",
+    ],
+)
+
+otbn_library(
     name = "intt_mldsa",
     srcs = [
         "intt_mldsa.s",
