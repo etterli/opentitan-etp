@@ -617,84 +617,14 @@ module otbn_mac_bignum
     .out_o (montg_r)
   );
 
-  // Perform subtraction if r >= q then r = r - q else r = r
-  // Minuend - Subtrahend = Difference
-  logic [QWLEN-1:0] sub_minuend;
-  logic [QWLEN-1:0] sub_subtrahend;
-  logic [QWLEN-1:0] sub_difference;
-  logic [3:0]       sub_carries_out;
-  logic [QWLEN-1:0] all_montg_r_cor [NELENMAC-1];
+  // Critical path optimization
+  // We do not perform the conditional subtraction in the MAC to improve the critical path.
+  // The conditional subtraction can be performed in one cycle for all four 64b chunks by using
+  // bn.addvm with zero as one input. This requires one cycle more in addition to the 12 cycles
+  // spent here. However, we can reduce the critical path and save the area of a 64b vectorized
+  // adder.
   logic [QWLEN-1:0] montg_r_cor;
-
-  assign sub_minuend    = montg_r;
-  assign sub_subtrahend = mod_q;
-
-  // Subtraction is performed by using: a - b = a + ~b + 1
-  otbn_vec_adder #(
-    .LVLEN(QWLEN)
-  ) u_vec_subtractor (
-    .operand_a_i       (sub_minuend),
-    .operand_b_i       (sub_subtrahend),
-    .operand_b_invert_i(1'b1),
-    .carries_in_i      (4'b1111),
-    .use_ext_carry_i   (mac_predec_bignum_i.vec_sub_carry_sel),
-    .sum_o             (sub_difference),
-    .carries_out_o     (sub_carries_out)
-  );
-
-  // Decide whether to apply the conditional subtraction based on carry bit.
-  // If subtraction generates carry: r - q >= 0 hence r >= q and we must subtract.
-
-  // We must blank the inputs into the conditional MUX as we otherwise combine the shares.
-  // E.g. if we operate in 16b mode then the 32b MUX structure may not receive data.
-
-  // Extract the onehot signals to use them as blanker control signals.
-  // TODO: maybe refactor this to uncouple dependence on onehot encoding? Same issue as with other
-  //       prim_onehot_mux which only select 16b or 32b.
-  logic predec_is_16b, predec_is_32b;
-  assign predec_is_16b = mac_predec_bignum_i.vec_elen_onehot[0];
-  assign predec_is_32b = mac_predec_bignum_i.vec_elen_onehot[1];
-
-  logic [QWLEN-1:0] sub_diff_16b_blanked, sub_diff_32b_blanked;
-  logic [QWLEN-1:0] montg_r_16b_blanked, montg_r_32b_blanked;
-
-  prim_blanker #(.Width(QWLEN)) u_sub_difference_16b_blanker (
-    .in_i (sub_difference),
-    .en_i (predec_is_16b),
-    .out_o(sub_diff_16b_blanked)
-  );
-
-  prim_blanker #(.Width(QWLEN)) u_montg_r_16b_blanker (
-    .in_i (montg_r),
-    .en_i (predec_is_16b),
-    .out_o(montg_r_16b_blanked)
-  );
-
-  assign all_montg_r_cor[ModVecElen16] =
-    {sub_carries_out[3] ? sub_diff_16b_blanked[16*3+:16] : montg_r_16b_blanked[16*3+:16],
-     sub_carries_out[2] ? sub_diff_16b_blanked[16*2+:16] : montg_r_16b_blanked[16*2+:16],
-     sub_carries_out[1] ? sub_diff_16b_blanked[16*1+:16] : montg_r_16b_blanked[16*1+:16],
-     sub_carries_out[0] ? sub_diff_16b_blanked[16*0+:16] : montg_r_16b_blanked[16*0+:16]};
-
-  prim_blanker #(.Width(QWLEN)) u_sub_difference_32b_blanker (
-    .in_i (sub_difference),
-    .en_i (predec_is_32b),
-    .out_o(sub_diff_32b_blanked)
-  );
-
-  prim_blanker #(.Width(QWLEN)) u_montg_r_32b_blanker (
-    .in_i (montg_r),
-    .en_i (predec_is_32b),
-    .out_o(montg_r_32b_blanked)
-  );
-
-  assign all_montg_r_cor[ModVecElen32] =
-    {sub_carries_out[3] ? sub_diff_32b_blanked[32*1+:32] : montg_r_32b_blanked[32*1+:32],
-     sub_carries_out[1] ? sub_diff_32b_blanked[32*0+:32] : montg_r_32b_blanked[32*0+:32]};
-
-  // As the conditional subtraction MUXs only get blanked inputs we can use a regular MUX
-  assign montg_r_cor = predec_is_32b ? all_montg_r_cor[ModVecElen32] :
-                                       all_montg_r_cor[ModVecElen16];
+  assign montg_r_cor = montg_r;
 
   ///////////////////////////////////////////
   // ACC merging for vectorized operations //
