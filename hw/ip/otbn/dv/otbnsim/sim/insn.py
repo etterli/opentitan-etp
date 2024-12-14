@@ -9,7 +9,7 @@ from .flags import FlagReg
 from .isa import (OTBNInsn, RV32RegReg, RV32RegImm,
                   RV32ImmShift, insn_for_mnemonic, logical_byte_shift,
                   extract_quarter_word,
-                  montgomery_mul,
+                  montgomery_mul_no_cond_subtraction,
                   extract_simd_element_size,
                   extract_sub_word,
                   # extract_sub_word_signed,
@@ -1581,7 +1581,7 @@ class BNMULVM(OTBNInsn):
             assert (mod_q > 0) and (mod_q < 2**size)
 
             # Montgomery computation
-            elem_c = montgomery_mul(elem_a, elem_b, mod_q, mod_R, size)
+            elem_c = montgomery_mul_no_cond_subtraction(elem_a, elem_b, mod_q, mod_R, size)
 
             elem_c = elem_c & ((1 << size) - 1)
             result = (result << size) | elem_c
@@ -1652,7 +1652,7 @@ class BNMULVML(OTBNInsn):
             assert (mod_q > 0) and (mod_q < 2**size)
 
             # Montgomery computation
-            elem_c = montgomery_mul(elem_a, lane_elem, mod_q, mod_R, size)
+            elem_c = montgomery_mul_no_cond_subtraction(elem_a, lane_elem, mod_q, mod_R, size)
 
             elem_c = elem_c & ((1 << size) - 1)
             result = (result << size) | elem_c
