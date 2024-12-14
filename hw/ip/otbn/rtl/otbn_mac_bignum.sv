@@ -642,27 +642,59 @@ module otbn_mac_bignum
     .carries_out_o     (sub_carries_out)
   );
 
-  // Decide with carry bit.
-  // If subtraction generates carry: r - q >= 0 hence r >= q
-  assign all_montg_r_cor[ModVecElen16] =
-                           {sub_carries_out[3] ? sub_difference[16*3+:16] : montg_r[16*3+:16],
-                            sub_carries_out[2] ? sub_difference[16*2+:16] : montg_r[16*2+:16],
-                            sub_carries_out[1] ? sub_difference[16*1+:16] : montg_r[16*1+:16],
-                            sub_carries_out[0] ? sub_difference[16*0+:16] : montg_r[16*0+:16]};
-  assign all_montg_r_cor[ModVecElen32] =
-                           {sub_carries_out[3] ? sub_difference[32*1+:32] : montg_r[32*1+:32],
-                            sub_carries_out[1] ? sub_difference[32*0+:32] : montg_r[32*0+:32]};
+  // Decide whether to apply the conditional subtraction based on carry bit.
+  // If subtraction generates carry: r - q >= 0 hence r >= q and we must subtract.
 
-  prim_onehot_mux #(
-    .Width(QWLEN),
-    .Inputs(NELENMAC-1)
-  ) u_montg_r_cor_value_mux (
-    .clk_i,
-    .rst_ni,
-    .in_i  (all_montg_r_cor),
-    .sel_i (mac_predec_bignum_i.vec_elen_onehot[1:0]),
-    .out_o (montg_r_cor)
+  // We must blank the inputs into the conditional MUX as we otherwise combine the shares.
+  // E.g. if we operate in 16b mode then the 32b MUX structure may not receive data.
+
+  // Extract the onehot signals to use them as blanker control signals.
+  // TODO: maybe refactor this to uncouple dependence on onehot encoding? Same issue as with other
+  //       prim_onehot_mux which only select 16b or 32b.
+  logic predec_is_16b, predec_is_32b;
+  assign predec_is_16b = mac_predec_bignum_i.vec_elen_onehot[0];
+  assign predec_is_32b = mac_predec_bignum_i.vec_elen_onehot[1];
+
+  logic [QWLEN-1:0] sub_diff_16b_blanked, sub_diff_32b_blanked;
+  logic [QWLEN-1:0] montg_r_16b_blanked, montg_r_32b_blanked;
+
+  prim_blanker #(.Width(QWLEN)) u_sub_difference_16b_blanker (
+    .in_i (sub_difference),
+    .en_i (predec_is_16b),
+    .out_o(sub_diff_16b_blanked)
   );
+
+  prim_blanker #(.Width(QWLEN)) u_montg_r_16b_blanker (
+    .in_i (montg_r),
+    .en_i (predec_is_16b),
+    .out_o(montg_r_16b_blanked)
+  );
+
+  assign all_montg_r_cor[ModVecElen16] =
+    {sub_carries_out[3] ? sub_diff_16b_blanked[16*3+:16] : montg_r_16b_blanked[16*3+:16],
+     sub_carries_out[2] ? sub_diff_16b_blanked[16*2+:16] : montg_r_16b_blanked[16*2+:16],
+     sub_carries_out[1] ? sub_diff_16b_blanked[16*1+:16] : montg_r_16b_blanked[16*1+:16],
+     sub_carries_out[0] ? sub_diff_16b_blanked[16*0+:16] : montg_r_16b_blanked[16*0+:16]};
+
+  prim_blanker #(.Width(QWLEN)) u_sub_difference_32b_blanker (
+    .in_i (sub_difference),
+    .en_i (predec_is_32b),
+    .out_o(sub_diff_32b_blanked)
+  );
+
+  prim_blanker #(.Width(QWLEN)) u_montg_r_32b_blanker (
+    .in_i (montg_r),
+    .en_i (predec_is_32b),
+    .out_o(montg_r_32b_blanked)
+  );
+
+  assign all_montg_r_cor[ModVecElen32] =
+    {sub_carries_out[3] ? sub_diff_32b_blanked[32*1+:32] : montg_r_32b_blanked[32*1+:32],
+     sub_carries_out[1] ? sub_diff_32b_blanked[32*0+:32] : montg_r_32b_blanked[32*0+:32]};
+
+  // As the conditional subtraction MUXs only get blanked inputs we can use a regular MUX
+  assign montg_r_cor = predec_is_32b ? all_montg_r_cor[ModVecElen32] :
+                                       all_montg_r_cor[ModVecElen16];
 
   ///////////////////////////////////////////
   // ACC merging for vectorized operations //
