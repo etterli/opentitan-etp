@@ -75,18 +75,19 @@ module otbn_predecode
   // to signal "regular" 256b operation. We thus first extract the ELEN from the instruction and
   // then depending on the instruction convert it correctly. Vectorized instructions for the ALU
   // and MAC have different bits for encoding the ELEN.
-  logic [1:0]       alu_bignum_vec_elen_raw;
-  elen_bignum_e     alu_bignum_vec_elen; // The parsed vector element length incl. the 256b option
-  logic [NELEN-1:0] alu_bignum_vec_elen_onehot;
-  logic [1:0]       mac_bignum_vec_elen_raw;
-  elen_bignum_e     mac_bignum_vec_elen; // The parsed vector element length incl. the 256b option
-  logic [NELEN-1:0] mac_bignum_vec_elen_onehot;
+  logic [1:0]          alu_bignum_vec_elen_raw;
+  elen_bignum_e        alu_bignum_vec_elen; // The parsed vector element length incl. 256b
+  logic [NELEN-1:0]    alu_bignum_vec_elen_onehot;
+  logic [1:0]          mac_bignum_vec_elen_raw;
+  elen_mac_e           mac_bignum_vec_elen; // The parsed vector element length 16b, 32b or 64b
+  logic [NELENMAC-1:0] mac_bignum_vec_elen_onehot;
 
   // Control signal for the vectorized adders to propagate the carry bits depending on the element
   // length. Each bit controls one vector chunk. Is generated from the parsed vector ELEN.
   logic [NVecProc-1:0] alu_bignum_vec_adder_carry_sel;
   logic [NVecProc-1:0] mac_bignum_vec_adder_carry_sel;
   logic [3:0]          mac_bignum_vec_sub_carry_sel;
+  logic [2:0]          mac_bignum_vec_mul_elen_ctrl;
 
   // Mod output selector control signals
   logic alu_bignum_vec_mod_selector_en;
@@ -214,7 +215,7 @@ module otbn_predecode
     alu_bignum_vec_transposer_is_trn1 = 1'b0;
 
     // Default we multiply two 64b values and add 256b values
-    mac_bignum_vec_elen = VecElen64;
+    mac_bignum_vec_elen = VecMacElen64;
     mac_bignum_op_en    = 1'b0;
     mac_bignum_is_mod   = 1'b0;
     mac_bignum_is_vec   = 1'b0;
@@ -447,7 +448,7 @@ module otbn_predecode
               mac_bignum_is_vec        = 1'b1;
               mac_bignum_is_mod        = 1'b0;
               mac_bignum_mul_merger_en = 1'b1;
-              mac_bignum_vec_elen      = parse_raw_elen(mac_bignum_vec_elen_raw);
+              mac_bignum_vec_elen      = parse_raw_mac_elen(mac_bignum_vec_elen_raw);
 
               rf_ren_a_bignum  = 1'b1;
               rf_ren_b_bignum  = 1'b1;
@@ -463,7 +464,7 @@ module otbn_predecode
               mac_bignum_op_en    = 1'b1;
               mac_bignum_is_vec   = 1'b1;
               mac_bignum_is_mod   = 1'b1;
-              mac_bignum_vec_elen = parse_raw_elen(mac_bignum_vec_elen_raw);
+              mac_bignum_vec_elen = parse_raw_mac_elen(mac_bignum_vec_elen_raw);
 
               rf_ren_a_bignum  = 1'b1;
               rf_ren_b_bignum  = 1'b1;
@@ -670,32 +671,36 @@ module otbn_predecode
     // The subtractor is 64b and is only used for the modulo case.
     // TODO: assert that ELEN is only 16b, 32b or 256b depending on mulv type
     unique case (mac_bignum_vec_elen)
-      VecElen16: begin
+      VecMacElen16: begin
         // Modulo reduction for 16b elements:
         // - Adder: We operate on four 32b elements in parallel
         //   16 carry sel bits because we have a 256b adder
         // - Subtractor: We operate on four 16b elements in parallel
         mac_bignum_vec_adder_carry_sel = {8{2'b01}};
         mac_bignum_vec_sub_carry_sel   = {4{1'b1}};
+        mac_bignum_vec_mul_elen_ctrl   = 3'b001;
       end
-      VecElen32: begin
+      VecMacElen32: begin
         // Modulo reduction for 32b elements:
         // - Adder: We operate on two 64b elements in parallel
         //   16 carry sel bits because we have a 256b adder
         // - Subtractor: We operate on two 32b elements in parallel
         mac_bignum_vec_adder_carry_sel = {4{4'b0001}};
         mac_bignum_vec_sub_carry_sel   = {2{2'b01}};
+        mac_bignum_vec_mul_elen_ctrl   = 3'b011;
       end
-      VecElen64: begin
+      VecMacElen64: begin
         // Regular 64b multiplication with ACC accumulation
         // - Adder: We operate on 256b values
         // - Subtractor: Unused
         mac_bignum_vec_adder_carry_sel = 16'd1;
         mac_bignum_vec_sub_carry_sel   = '1;
+        mac_bignum_vec_mul_elen_ctrl   = 3'b111;
       end
       default: begin // TODO: Throw error -> Use assert
         mac_bignum_vec_adder_carry_sel = '1;
         mac_bignum_vec_sub_carry_sel   = '1;
+        mac_bignum_vec_mul_elen_ctrl   = 3'b000;
       end
     endcase
 
@@ -710,9 +715,9 @@ module otbn_predecode
     .out_o(alu_bignum_vec_elen_onehot)
   );
 
-  // ELEN onehot encoded for mod result selection and mod replicator.
+  // MAC ELEN onehot encoded for multiplier.
   prim_onehot_enc #(
-    .OneHotWidth (NELEN)
+    .OneHotWidth (NELENMAC)
   ) u_mac_vec_elen_enc (
     .in_i (mac_bignum_vec_elen),
     .en_i ('1), // always enable
@@ -777,6 +782,7 @@ module otbn_predecode
   assign mac_predec_bignum_o.vec_elen_onehot     = mac_bignum_vec_elen_onehot;
   assign mac_predec_bignum_o.vec_adder_carry_sel = mac_bignum_vec_adder_carry_sel;
   assign mac_predec_bignum_o.vec_sub_carry_sel   = mac_bignum_vec_sub_carry_sel;
+  assign mac_predec_bignum_o.vec_mul_elen_ctrl   = mac_bignum_vec_mul_elen_ctrl;
   assign mac_predec_bignum_o.is_mod              = mac_bignum_is_mod;
   assign mac_predec_bignum_o.is_vec              = mac_bignum_is_vec;
   assign mac_predec_bignum_o.mul_type            = mac_bignum_mul_type;

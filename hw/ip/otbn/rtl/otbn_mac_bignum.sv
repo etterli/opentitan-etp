@@ -399,13 +399,9 @@ module otbn_mac_bignum
     endcase
   end
 
+  // Multiplier is fully blanked. The inputs do not have to be blanked.
   otbn_vec_multiplier u_vec_multiplier (
-    .clk_i,
-    .rst_ni,
-    .operand_a_i  (mul_op_a),
-    .operand_b_i  (mul_op_b),
-    .elen_onehot_i(mac_predec_bignum_i.vec_elen_onehot),
-    .result_o     (mul_res)
+    .elen_ctrl_i(mac_predec_bignum_i.vec_mul_elen_ctrl),
   );
 
   ///////////////////////////////////////////

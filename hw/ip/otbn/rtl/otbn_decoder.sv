@@ -74,19 +74,18 @@ module otbn_decoder
 
   comparison_op_base_e comparison_operator_base;
 
-
-  logic [1:0]       mac_op_a_qw_sel_bignum;
-  logic [1:0]       mac_op_b_qw_sel_bignum;
-  logic             mac_wr_hw_sel_upper_bignum;
-  logic [1:0]       mac_pre_acc_shift_bignum;
-  logic             mac_zero_acc_bignum;
-  logic             mac_shift_out_bignum;
-  logic             mac_en_bignum;
-  logic             mac_is_vec_bignum;
-  mac_mul_type_e    mac_mul_type_bignum;
-  elen_bignum_e     mac_vec_elen;
-  logic [NELEN-1:0] mac_vec_elen_onehot;
-  logic [3:0]       mac_lane_index;
+  logic [1:0]          mac_op_a_qw_sel_bignum;
+  logic [1:0]          mac_op_b_qw_sel_bignum;
+  logic                mac_wr_hw_sel_upper_bignum;
+  logic [1:0]          mac_pre_acc_shift_bignum;
+  logic                mac_zero_acc_bignum;
+  logic                mac_shift_out_bignum;
+  logic                mac_en_bignum;
+  logic                mac_is_vec_bignum;
+  mac_mul_type_e       mac_mul_type_bignum;
+  elen_mac_e           mac_vec_elen;
+  logic [NELENMAC-1:0] mac_vec_elen_onehot;
+  logic [3:0]          mac_lane_index;
 
   logic rf_ren_a_base;
   logic rf_ren_b_base;
@@ -198,7 +197,7 @@ module otbn_decoder
   assign mac_lane_index             = insn[31:28];
 
   prim_onehot_enc #(
-    .OneHotWidth (NELEN)
+    .OneHotWidth (NELENMAC)
   ) u_mac_elen_bignum_vec_enc (
     .in_i (mac_vec_elen),
     .en_i ('1), // always enable
@@ -343,7 +342,7 @@ module otbn_decoder
     mac_is_vec_bignum      = 1'b0;
     mac_mul_type_bignum    = MacMulRegular;
     // Default we multiply two 64b values and add 256b values
-    mac_vec_elen           = VecElen64;
+    mac_vec_elen           = VecMacElen64;
 
     rf_a_indirect_bignum   = 1'b0;
     rf_b_indirect_bignum   = 1'b0;
@@ -606,7 +605,7 @@ module otbn_decoder
             mac_en_bignum       = 1'b1;
             mac_is_vec_bignum   = 1'b1;
 
-            mac_vec_elen = parse_raw_elen(insn[27:26]);
+            mac_vec_elen = parse_raw_mac_elen(insn[27:26]);
 
             mac_mul_type_bignum = MacMulVec;
             if (insn[25]) begin
@@ -614,7 +613,7 @@ module otbn_decoder
             end
 
             // This supports only 16b and 32b ELEN
-            if (!((mac_vec_elen == VecElen16) || (mac_vec_elen == VecElen32))) begin
+            if (!((mac_vec_elen == VecMacElen16) || (mac_vec_elen == VecMacElen32))) begin
               illegal_insn = 1'b1;
             end
           end
@@ -628,7 +627,7 @@ module otbn_decoder
             mac_en_bignum       = 1'b1;
             mac_is_vec_bignum   = 1'b1;
 
-            mac_vec_elen = parse_raw_elen(insn[27:26]);
+            mac_vec_elen = parse_raw_mac_elen(insn[27:26]);
 
             mac_mul_type_bignum = MacMulVecMod;
             if (insn[25]) begin
@@ -636,7 +635,7 @@ module otbn_decoder
             end
 
             // This supports only 16b and 32b ELEN
-            if (!((mac_vec_elen == VecElen16) || (mac_vec_elen == VecElen32))) begin
+            if (!((mac_vec_elen == VecMacElen16) || (mac_vec_elen == VecMacElen32))) begin
               illegal_insn = 1'b1;
             end
           end
@@ -1161,6 +1160,8 @@ module otbn_decoder
         alu_shifter_mask_bignum_vec    = {256{1'b1}};
       end
     endcase
+
+    // TODO: generate MAC signals
   end
 
   // clk_i and rst_ni are only used by assertions
