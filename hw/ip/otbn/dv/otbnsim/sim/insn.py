@@ -1329,7 +1329,7 @@ class BNADDVM(OTBNInsn):
         size = extract_simd_element_size(self.datatype)
 
         result = 0
-        # extract the modulus from WSR MOD but only size bits as upper bits may contain the
+        # Extract the modulus from WSR MOD but only size bits as upper bits may contain the
         # Montgomery constant.
         mod_val = state.wsrs.MOD.read_unsigned() & ((1 << size) - 1)
 
@@ -1398,9 +1398,10 @@ class BNSUBVM(OTBNInsn):
         size = extract_simd_element_size(self.datatype)
 
         result = 0
-        # extract the modulus from WSR MOD but only size bits as upper bits may contain the
+        # Extract the modulus from WSR MOD but only size bits as upper bits may contain the
         # Montgomery constant.
         mod_val = state.wsrs.MOD.read_unsigned() & ((1 << size) - 1)
+
         for elem in range(256 // size - 1, -1, -1):
             elem_a = extract_sub_word(vec_a, size, elem)
             elem_b = extract_sub_word(vec_b, size, elem)
@@ -1566,7 +1567,7 @@ class BNMULVM(OTBNInsn):
         # internal registers tmp and c.
         result = 0
 
-        # extract the Montgomery constants q and R
+        # Extract the Montgomery constants q and R
         mod_raw = state.wsrs.MOD.read_unsigned()
         mod_offset = 32 if (size == 16 or size == 32) else size
         mod_q = mod_raw & ((1 << size) - 1)
@@ -1610,7 +1611,8 @@ class BNMULVM(OTBNInsn):
             yield None
             acc = state.wsrs.ACC.read_unsigned()
             current_qword_mask = (((1 << 256) - 1) & (qword_mask << (qword * 64)))
-            acc = acc & ~current_qword_mask  # delete the to be replaced qw
+            # set all bits to zero at the location of the to be replaced qword
+            acc = acc & ~current_qword_mask
             acc |= result & current_qword_mask
             acc = state.wsrs.ACC.write_unsigned(acc)
 
@@ -1633,10 +1635,10 @@ class BNMULVML(OTBNInsn):
         vec_b = state.wdrs.get_reg(self.wrs2).read_unsigned()
         size = extract_simd_element_size(self.datatype)
 
-        # See comment in BNMULVM for explanation
+        # See comment in BNMULVM for detailed explanation of instruction
         result = 0
 
-        # extract the Montgomery constants q and R
+        # Extract the Montgomery constants q and R
         mod_raw = state.wsrs.MOD.read_unsigned()
         mod_offset = 32 if (size == 16 or size == 32) else size
         mod_q = mod_raw & ((1 << size) - 1)
