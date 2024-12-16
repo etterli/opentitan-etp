@@ -53,6 +53,18 @@ package otbn_pkg;
   // _DmemScratchSizeBytes in util/shared/mem_layout.py
   parameter int DmemScratchSizeByte = 1024;
 
+  // Width of vector, in bits
+  parameter int VLEN = WLEN;
+
+  // Width of vector chunk we operate on, in bits
+  parameter int VChunkLEN = 16;
+
+  // Number of vector chunk processing elements
+  parameter int NVecProc = VLEN / VChunkLEN;
+
+  // Number of different ELEN values udpate elen_bignum_e acordingly
+  parameter int NELEN = 5;
+
   // Toplevel constants ============================================================================
 
   parameter int AlertFatal = 0;
@@ -216,6 +228,7 @@ package otbn_pkg;
     InsnOpcodeBignumMisc     = 7'h0B,
     InsnOpcodeBignumArith    = 7'h2B,
     InsnOpcodeBignumMulqacc  = 7'h3B,
+    InsnOpcodeBignumVec      = 7'h5B,
     InsnOpcodeBignumBaseMisc = 7'h7B
   } insn_opcode_e;
 
@@ -233,21 +246,29 @@ package otbn_pkg;
     AluOpBaseSll
   } alu_op_base_e;
 
-  typedef enum logic [3:0] {
+  typedef enum logic [4:0] {
     AluOpBignumAdd,
     AluOpBignumAddc,
     AluOpBignumAddm,
+    AluOpBignumAddv,
+    AluOpBignumAddvm,
 
     AluOpBignumSub,
     AluOpBignumSubb,
     AluOpBignumSubm,
+    AluOpBignumSubv,
+    AluOpBignumSubvm,
 
     AluOpBignumRshi,
+    AluOpBignumShv,
 
     AluOpBignumXor,
     AluOpBignumOr,
     AluOpBignumAnd,
     AluOpBignumNot,
+
+    AluOpBignumTrn1,
+    AluOpBignumTrn2,
 
     AluOpBignumNone
   } alu_op_bignum_e;
@@ -294,6 +315,20 @@ package otbn_pkg;
     ShamtSelBignumS,
     ShamtSelBignumZero
   } shamt_sel_bignum_e;
+
+  // Vector element length type for bignum vec ISA
+  // The ISA forsees only 4 types (16 to 128 bits). However, some regular and
+  // vectorized instructions share the hardware and thus we need a 256b type
+  // to signal "regular" 256b operation. See for example AluOpBignumAddm.
+  //
+  // Update NELEN acordingly!
+  typedef enum logic [2:0] {
+    VecElen16  = 3'h0,
+    VecElen32  = 3'h1,
+    VecElen64  = 3'h2,
+    VecElen128 = 3'h3,
+    VecElen256 = 3'h4
+  } elen_bignum_e;
 
   // Regfile write data selection
   typedef enum logic [2:0] {
@@ -415,9 +450,9 @@ package otbn_pkg;
   } insn_dec_base_t;
 
   typedef struct packed {
-    logic [WdrAw-1:0]        d;           // Destination register
-    logic [WdrAw-1:0]        a;           // First source register
-    logic [WdrAw-1:0]        b;           // Second source register
+    logic [WdrAw-1:0]        d;           // Destination register / vector
+    logic [WdrAw-1:0]        a;           // First source register / vector
+    logic [WdrAw-1:0]        b;           // Second source register / vector
     logic [WLEN-1:0]         i;           // Immediate
 
     logic                    rf_a_indirect; // Indirect lookup, bignum register index a comes from
