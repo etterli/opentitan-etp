@@ -1,0 +1,4 @@
+w10 = 0xf800ffff00007ffff800fffe04dffffff800fffff9d3db6df800ffff0000fff3
+w11 = 0xfffff800ffffffff000000007ffffffffffff800fffffffe000004dfffffffff
+w12 = 0xfffffffffffff800ffffffffffffffff00000000000000007fffffffffffffff
+w13 = 0xfffffffffffffffffffffffffffff800ffffffffffffffffffffffffffffffff

@@ -109,6 +109,8 @@ module otbn_alu_bignum
   output logic [ExtWLEN-1:0]          ispr_acc_wr_data_intg_o,
   output logic                        ispr_acc_wr_en_o,
 
+  output logic [ExtWLEN-1:0]          ispr_mod_intg_o,
+
   output logic                        reg_intg_violation_err_o,
 
   input  logic                        sec_wipe_mod_urnd_i,
@@ -427,6 +429,9 @@ module otbn_alu_bignum
     .elen_onehot_i   (alu_predec_bignum_i.vec_elen_onehot),
     .mod_replicated_o(mod_no_intg_q_replicated)
   );
+
+  // output current MOD value
+  assign ispr_mod_intg_o = mod_intg_q;
 
   /////////
   // ACC //

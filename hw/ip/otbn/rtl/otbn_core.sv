@@ -207,6 +207,7 @@ module otbn_core
 
   mac_bignum_operation_t mac_bignum_operation;
   logic [WLEN-1:0]       mac_bignum_operation_result;
+  logic                  mac_bignum_operation_valid;
   flags_t                mac_bignum_operation_flags;
   flags_t                mac_bignum_operation_flags_en;
   logic                  mac_bignum_en;
@@ -226,6 +227,7 @@ module otbn_core
   logic [ExtWLEN-1:0]          ispr_acc_intg;
   logic [ExtWLEN-1:0]          ispr_acc_wr_data_intg;
   logic                        ispr_acc_wr_en;
+  logic [ExtWLEN-1:0]          ispr_mod_intg;
   logic                        ispr_init;
 
   logic            rnd_req;
@@ -517,6 +519,7 @@ module otbn_core
     // To/from bignum MAC
     .mac_bignum_operation_o       (mac_bignum_operation),
     .mac_bignum_operation_result_i(mac_bignum_operation_result),
+    .mac_bignum_operation_valid_i (mac_bignum_operation_valid),
     .mac_bignum_en_o              (mac_bignum_en),
     .mac_bignum_commit_o          (mac_bignum_commit),
 
@@ -846,6 +849,8 @@ module otbn_core
     .ispr_acc_wr_data_intg_o(ispr_acc_wr_data_intg),
     .ispr_acc_wr_en_o       (ispr_acc_wr_en),
 
+    .ispr_mod_intg_o(ispr_mod_intg),
+
     .reg_intg_violation_err_o(alu_bignum_reg_intg_violation_err),
 
     .sec_wipe_mod_urnd_i(sec_wipe_mod_urnd),
@@ -870,6 +875,7 @@ module otbn_core
 
     .operation_i                    (mac_bignum_operation),
     .operation_result_o             (mac_bignum_operation_result),
+    .operation_valid_o              (mac_bignum_operation_valid),
     .operation_flags_o              (mac_bignum_operation_flags),
     .operation_flags_en_o           (mac_bignum_operation_flags_en),
     .operation_intg_violation_err_o (mac_bignum_reg_intg_violation_err),
@@ -879,6 +885,8 @@ module otbn_core
 
     .urnd_data_i        (urnd_data),
     .sec_wipe_acc_urnd_i(sec_wipe_acc_urnd),
+    .sec_wipe_tmp_urnd_i(sec_wipe_acc_urnd), // TODO: Create a separate signal and urnd_data?
+    .sec_wipe_c_urnd_i  (sec_wipe_acc_urnd), // TODO: Create a separate signal and urnd_data?
     .sec_wipe_running_i (secure_wipe_running_o),
     .sec_wipe_err_o     (mac_bignum_sec_wipe_err),
 
@@ -887,7 +895,9 @@ module otbn_core
 
     .ispr_acc_intg_o        (ispr_acc_intg),
     .ispr_acc_wr_data_intg_i(ispr_acc_wr_data_intg),
-    .ispr_acc_wr_en_i       (ispr_acc_wr_en)
+    .ispr_acc_wr_en_i       (ispr_acc_wr_en),
+
+    .ispr_mod_intg_i(ispr_mod_intg)
   );
 
   otbn_rnd #(
