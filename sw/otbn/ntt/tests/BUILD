@@ -51,3 +51,11 @@ otbn_sim_test(
     deps = ["//sw/otbn/ntt:intt_mldsa"],
 )
 
+otbn_sim_test(
+    name = "intt_mldsa_exp_reduction_test",
+    srcs = [
+        "intt_mldsa_exp_reduction_test.s",
+    ],
+    exp = "intt_mldsa_exp_reduction_test.exp",
+    deps = ["//sw/otbn/ntt:intt_mldsa_exp_reduction"],
+)

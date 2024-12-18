@@ -40,3 +40,10 @@ otbn_library(
         "intt_mldsa.s",
     ],
 )
+
+otbn_library(
+    name = "intt_mldsa_exp_reduction",
+    srcs = [
+        "intt_mldsa_exp_reduction.s",
+    ],
+)
