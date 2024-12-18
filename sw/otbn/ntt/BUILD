@@ -14,8 +14,22 @@ otbn_library(
 )
 
 otbn_library(
+    name = "intt_base_dilithium",
+    srcs = [
+        "intt_base_dilithium.s",
+    ],
+)
+
+otbn_library(
     name = "ntt_mldsa",
     srcs = [
         "ntt_mldsa.s",
+    ],
+)
+
+otbn_library(
+    name = "intt_mldsa",
+    srcs = [
+        "intt_mldsa.s",
     ],
 )
