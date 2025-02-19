@@ -210,7 +210,7 @@ module otbn_alu_bignum
   // selecting any inputs in the one-hot muxes below. The instruction fetch/predecoder stage
   // is driving the selector inputs accordingly.
 
-  always_comb begin
+  always_comb begin : g_expected_flags
     expected_flags_adder_update = '0;
     expected_flags_logic_update = '0;
     expected_flags_mac_update   = '0;
@@ -579,17 +579,23 @@ module otbn_alu_bignum
     assign shifter_in_lower_reverse[i] = shifter_in_lower[WLEN-i-1];
   end
 
-  assign shifter_in = {shifter_in_upper,
+  always_comb begin : g_shifter_in
+    shifter_in = {shifter_in_upper,
       alu_predec_bignum_i.shift_right ? shifter_in_lower : shifter_in_lower_reverse};
+  end
 
-  assign shifter_out = shifter_in >> alu_predec_bignum_i.shift_amt;
+  always_comb begin : g_shifter
+    shifter_out = shifter_in >> alu_predec_bignum_i.shift_amt;
+  end
 
   for (genvar i = 0; i < WLEN; i++) begin : g_shifter_out_lower_reverse
     assign shifter_out_lower_reverse[i] = shifter_out[WLEN-i-1];
   end
 
-  assign shifter_res =
+  always_comb begin : g_shifter_res
+    shifter_res =
       alu_predec_bignum_i.shift_right ? shifter_out[WLEN-1:0] : shifter_out_lower_reverse;
+  end
 
   // Only the lower WLEN bits of the shift result are returned.
   assign unused_shifter_out_upper = shifter_out[WLEN*2-1:WLEN];
@@ -619,8 +625,10 @@ module otbn_alu_bignum
     .out_o(adder_x_op_a_blanked)
   );
 
-  assign adder_x_op_b = {adder_x_op_b_invert ? ~operation_i.operand_b : operation_i.operand_b,
-                         adder_x_carry_in};
+  always_comb begin : g_adder_x_ob_b_sel
+    adder_x_op_b = {adder_x_op_b_invert ? ~operation_i.operand_b : operation_i.operand_b,
+                    adder_x_carry_in};
+  end
 
   // SEC_CM: DATA_REG_SW.SCA
   prim_blanker #(.Width(WLEN+1)) u_adder_x_op_b_blanked (
@@ -629,7 +637,9 @@ module otbn_alu_bignum
     .out_o(adder_x_op_b_blanked)
   );
 
-  assign adder_x_res = adder_x_op_a_blanked + adder_x_op_b_blanked;
+  always_comb begin : g_adder_x
+    adder_x_res = adder_x_op_a_blanked + adder_x_op_b_blanked;
+  end
 
   // SEC_CM: DATA_REG_SW.SCA
   prim_blanker #(.Width(WLEN)) u_adder_y_op_a_blanked (
@@ -638,8 +648,10 @@ module otbn_alu_bignum
     .out_o(adder_y_op_a_blanked)
   );
 
-  assign x_res_operand_a_mux_out =
+  always_comb begin : g_x_res_operand_a_mux_out
+    x_res_operand_a_mux_out =
       alu_predec_bignum_i.x_res_operand_a_sel ? adder_x_res[WLEN:1] : adder_y_op_a_blanked;
+  end
 
   // SEC_CM: DATA_REG_SW.SCA
   prim_blanker #(.Width(WLEN)) u_adder_y_op_shifter_blanked (
@@ -648,14 +660,20 @@ module otbn_alu_bignum
     .out_o(adder_y_op_shifter_res_blanked)
   );
 
-  assign shift_mod_mux_out =
+  always_comb begin : g_shift_mod_mux_out
+    shift_mod_mux_out =
       alu_predec_bignum_i.shift_mod_sel ? adder_y_op_shifter_res_blanked : mod_no_intg_q;
+  end
 
   assign adder_y_op_a = {x_res_operand_a_mux_out, 1'b1};
-  assign adder_y_op_b = {adder_y_op_b_invert ? ~shift_mod_mux_out : shift_mod_mux_out,
-                         adder_y_carry_in};
+  always_comb begin : g_adder_y_b_sel
+    adder_y_op_b = {adder_y_op_b_invert ? ~shift_mod_mux_out : shift_mod_mux_out,
+                    adder_y_carry_in};
+  end
 
-  assign adder_y_res = adder_y_op_a + adder_y_op_b;
+  always_comb begin : g_adder_y
+    adder_y_res = adder_y_op_a + adder_y_op_b;
+  end
 
   // The LSb of the adder results are unused.
   logic unused_adder_x_res_lsb, unused_adder_y_res_lsb;
@@ -677,7 +695,7 @@ module otbn_alu_bignum
   logic expected_logic_shifter_en;
   logic [3:0] expected_logic_res_sel;
 
-  always_comb begin
+  always_comb begin : g_control_singals
     adder_x_carry_in          = 1'b0;
     adder_x_op_b_invert       = 1'b0;
     adder_y_carry_in          = 1'b0;
@@ -862,10 +880,12 @@ module otbn_alu_bignum
     .out_o(logical_op_shifter_res_blanked)
   );
 
-  assign logical_res_mux_in[AluOpLogicXor] = logical_op_a_blanked ^ logical_op_shifter_res_blanked;
-  assign logical_res_mux_in[AluOpLogicOr]  = logical_op_a_blanked | logical_op_shifter_res_blanked;
-  assign logical_res_mux_in[AluOpLogicAnd] = logical_op_a_blanked & logical_op_shifter_res_blanked;
-  assign logical_res_mux_in[AluOpLogicNot] = ~logical_op_shifter_res_blanked;
+  always_comb begin : g_logic_part
+    logical_res_mux_in[AluOpLogicXor] = logical_op_a_blanked ^ logical_op_shifter_res_blanked;
+    logical_res_mux_in[AluOpLogicOr]  = logical_op_a_blanked | logical_op_shifter_res_blanked;
+    logical_res_mux_in[AluOpLogicAnd] = logical_op_a_blanked & logical_op_shifter_res_blanked;
+    logical_res_mux_in[AluOpLogicNot] = ~logical_op_shifter_res_blanked;
+  end
 
   // SEC_CM: DATA_REG_SW.SCA
   prim_onehot_mux #(
@@ -884,7 +904,7 @@ module otbn_alu_bignum
   ////////////////////////
 
   logic adder_y_res_used;
-  always_comb begin
+  always_comb begin : g_mux_result_selection
     operation_result_o = adder_y_res[WLEN:1];
     adder_y_res_used = 1'b1;
 

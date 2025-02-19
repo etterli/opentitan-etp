@@ -133,7 +133,7 @@ module otbn_predecode
 
   assign flags_keep = ~(flags_adder_update | flags_logic_update | flags_mac_update | flags_ispr_wr);
 
-  always_comb begin
+  always_comb begin : g_control_generation
     rf_ren_a_base   = 1'b0;
     rf_ren_b_base   = 1'b0;
     rf_we_a_base    = 1'b0;

@@ -271,7 +271,7 @@ module otbn_decoder
   // Decoder //
   /////////////
 
-  always_comb begin
+  always_comb begin : g_decoder
     insn_subset            = InsnSubsetBase;
 
     rf_wdata_sel_base      = RfWdSelEx;
@@ -686,7 +686,7 @@ module otbn_decoder
   // Decoder for ALU control //
   /////////////////////////////
 
-  always_comb begin
+  always_comb begin : g_alu_control
     alu_operator_base        = AluOpBaseAdd;
     comparison_operator_base = ComparisonOpBaseEq;
 

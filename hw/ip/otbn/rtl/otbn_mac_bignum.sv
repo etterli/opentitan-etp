@@ -69,7 +69,7 @@ module otbn_mac_bignum
 
   // Extract QWLEN multiply operands from WLEN operand inputs based on chosen quarter word from the
   // instruction (operand_[a|b]_qw_sel).
-  always_comb begin
+  always_comb begin : g_op_sel
     mul_op_a = '0;
     mul_op_b = '0;
 
@@ -100,11 +100,13 @@ module otbn_mac_bignum
   logic unused_ok;
   assign unused_ok = ^(rst_ni);
 
-  assign mul_res = mul_op_a * mul_op_b;
+  always_comb begin : g_multiplier_hw
+    mul_res = mul_op_a * mul_op_b;
+  end
 
   // Shift the QWLEN multiply result into a WLEN word before accumulating using the shift amount
   // supplied in the instruction (pre_acc_shift_imm).
-  always_comb begin
+  always_comb begin : g_qw_shifter
     mul_res_shifted = '0;
 
     unique case (operation_i.pre_acc_shift_imm)
@@ -158,7 +160,9 @@ module otbn_mac_bignum
   assign adder_op_a = mul_res_shifted;
   assign adder_op_b = acc_blanked;
 
-  assign adder_result = adder_op_a + adder_op_b;
+  always_comb begin : g_adder
+    adder_result = adder_op_a + adder_op_b;
+  end
 
   // Split zero check between the two halves of the result. This is used for flag setting (see
   // below).
@@ -192,7 +196,7 @@ module otbn_mac_bignum
   assign operation_flags_o.C    = 1'b0;
   assign operation_flags_en_o.C = 1'b0;
 
-  always_comb begin
+  always_comb begin : g_acc_updater
     acc_no_intg_d = '0;
     unique case (1'b1)
       // Non-encoded inputs have to be encoded before writing to the register.
