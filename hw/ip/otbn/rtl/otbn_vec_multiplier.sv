@@ -248,15 +248,17 @@ module otbn_vec_multiplier
   assign pp_32b_33 = partial_products_32b_and_16b_blanked[3*(2*RadixPower)+:(2*RadixPower)];
 
   // Compute the sums
-  assign res_c0 =   64'(pp_32b_00) +
-                  ((64'(pp_32b_01) + 64'(pp_32b_10)) << RadixPower) +
-                   (64'(pp_32b_11)                   << 2*RadixPower);
+  always_comb begin : g_32b_summation
+    res_c0 =   64'(pp_32b_00) +
+             ((64'(pp_32b_01) + 64'(pp_32b_10)) << RadixPower) +
+             (64'(pp_32b_11)                   << 2*RadixPower);
 
-  assign res_c1 =   64'(pp_32b_22) +
-                  ((64'(pp_32b_23) + 64'(pp_32b_32)) << RadixPower) +
-                   (64'(pp_32b_33)                   << 2*RadixPower);
+    res_c1 =   64'(pp_32b_22) +
+             ((64'(pp_32b_23) + 64'(pp_32b_32)) << RadixPower) +
+             (64'(pp_32b_33)                   << 2*RadixPower);
 
-  assign res_32b = {res_c1, res_c0};
+    res_32b = {res_c1, res_c0};
+  end
 
   ////////////////
   // ELEN = 64b //
@@ -278,12 +280,14 @@ module otbn_vec_multiplier
   assign res_c0_blanked = res_32b_to_64b_blanked[0*Width+:Width];
   assign res_c1_blanked = res_32b_to_64b_blanked[1*Width+:Width];
 
-  assign res_64b =
-      128'(res_c0_blanked) +
-    ((128'(part_prods[0][2]) + 128'(part_prods[2][0])) << 2*RadixPower) +
-    ((128'(part_prods[0][3]) + 128'(part_prods[1][2])                   +
-      128'(part_prods[2][1]) + 128'(part_prods[3][0])) << 3*RadixPower) +
-    ((128'(part_prods[1][3]) + 128'(part_prods[3][1]) + 128'(res_c1_blanked)) << 4*RadixPower);
+  always_comb begin : g_64b_summation
+    res_64b =
+        128'(res_c0_blanked) +
+      ((128'(part_prods[0][2]) + 128'(part_prods[2][0])) << 2*RadixPower) +
+      ((128'(part_prods[0][3]) + 128'(part_prods[1][2])                   +
+        128'(part_prods[2][1]) + 128'(part_prods[3][0])) << 3*RadixPower) +
+      ((128'(part_prods[1][3]) + 128'(part_prods[3][1]) + 128'(res_c1_blanked)) << 4*RadixPower);
+  end
 
   //////////////////////
   // Result selection //
@@ -295,7 +299,7 @@ module otbn_vec_multiplier
   // Specifying a separate case with all zeros is costly in terms of area and an invalid control
   // signal should be caught by verification and FI is covered by the decoded and predecoded signal
   // comparison.
-  always_comb begin
+  always_comb begin : g_res_sel
     unique case (elen_ctrl_i)
       3'b111:  result_o = res_64b;
       3'b011:  result_o = res_32b;

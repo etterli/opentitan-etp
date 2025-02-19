@@ -342,7 +342,7 @@ module otbn_mac_bignum
   logic [QWLEN-1:0] all_qword_b [NELENMAC-1];
 
   // pick the lane index and replicate
-  always_comb begin // TODO: make bound check for lane_index
+  always_comb begin : g_lane_selection // TODO: make bound check for lane_index
     all_qword_b[ModVecElen16]  = {4{operand_b_blanked[operation_i.lane_index*16+:16]}};
     all_qword_b[ModVecElen32]  = {2{operand_b_blanked[operation_i.lane_index*32+:32]}};
   end
@@ -358,7 +358,7 @@ module otbn_mac_bignum
     .out_o (qword_b_lane)
   );
 
-  always_comb begin
+  always_comb begin : g_qw_selection
     unique case (op_a_qw_sel)
       2'd0: qword_a = operand_a_blanked[QWLEN*0+:QWLEN];
       2'd1: qword_a = operand_a_blanked[QWLEN*1+:QWLEN];
@@ -389,9 +389,11 @@ module otbn_mac_bignum
   logic [QWLEN-1:0] mul_op_b;
   logic [HWLEN-1:0] mul_res;
 
-  assign mul_op_a = mul_op_a_tmp_sel ? qword_a : tmp_no_intg_q;
+  always_comb begin : g_mux_mul_op_a
+    mul_op_a = mul_op_a_tmp_sel ? qword_a : tmp_no_intg_q;
+  end
 
-  always_comb begin
+  always_comb begin : g_mul_op_sel_b
     unique case (mul_op_b_sel)
       MulOpB:  mul_op_b = qword_b;
       MulOpR:  mul_op_b = mod_R;
@@ -428,7 +430,7 @@ module otbn_mac_bignum
   // For 16b elements we have four computations parallel (for 32b we have two)
   // The 16b multiplication results in a 32b result. This result is stored in register C
   // and the lower ELEN bits of each computation is stored into register TMP.
-  always_comb begin
+  always_comb begin : g_reg_c_data_selection
     c_no_intg_d = '0;
     unique case (1'b1)
       sec_wipe_c_urnd_i: c_no_intg_d = urnd_data_i[HWLEN-1:0];
@@ -451,7 +453,7 @@ module otbn_mac_bignum
     .out_o (tmp_value)
   );
 
-  always_comb begin
+  always_comb begin : g_reg_tmp_data_selection
     tmp_no_intg_d = '0;
     unique case (1'b1)
       sec_wipe_tmp_urnd_i: tmp_no_intg_d = urnd_data_i[QWLEN-1:0];
@@ -518,7 +520,7 @@ module otbn_mac_bignum
 
   // Shift the QWLEN multiply result into a WLEN word before accumulating using the shift amount
   // supplied in the instruction (pre_acc_shift_imm).
-  always_comb begin
+  always_comb begin : g_qw_shifter
     mul_res_shifted = '0;
 
     unique case (operation_i.pre_acc_shift_imm)
@@ -563,8 +565,10 @@ module otbn_mac_bignum
   // - mul_res_pre_shifted comes from a blanked value (mul_res_pre_shifted) which is fed through a
   //   MUX controlled with a predecoded value and all options are static. The signal is just
   //   extended with zeros depending on the MUX control signal.
-  assign adder_op_a = mac_predec_bignum_i.is_mod ? {{128{1'b0}}, c_blanked} : mul_res_shifted;
-  assign adder_op_b = mac_predec_bignum_i.is_mod ? mul_res_add : acc_add_blanked;
+  always_comb begin : g_adder_op_sel
+    adder_op_a = mac_predec_bignum_i.is_mod ? {{128{1'b0}}, c_blanked} : mul_res_shifted;
+    adder_op_b = mac_predec_bignum_i.is_mod ? mul_res_add : acc_add_blanked;
+  end
 
   otbn_vec_adder #(
     .LVLEN(WLEN)
@@ -670,11 +674,13 @@ module otbn_mac_bignum
     .out_o(montg_r_16b_blanked)
   );
 
-  assign all_montg_r_cor[ModVecElen16] =
-    {sub_carries_out[3] ? sub_diff_16b_blanked[16*3+:16] : montg_r_16b_blanked[16*3+:16],
-     sub_carries_out[2] ? sub_diff_16b_blanked[16*2+:16] : montg_r_16b_blanked[16*2+:16],
-     sub_carries_out[1] ? sub_diff_16b_blanked[16*1+:16] : montg_r_16b_blanked[16*1+:16],
-     sub_carries_out[0] ? sub_diff_16b_blanked[16*0+:16] : montg_r_16b_blanked[16*0+:16]};
+  always_comb begin : g_mux_all_montg_r_cor_16b
+    all_montg_r_cor[ModVecElen16] =
+      {sub_carries_out[3] ? sub_diff_16b_blanked[16*3+:16] : montg_r_16b_blanked[16*3+:16],
+      sub_carries_out[2] ? sub_diff_16b_blanked[16*2+:16] : montg_r_16b_blanked[16*2+:16],
+      sub_carries_out[1] ? sub_diff_16b_blanked[16*1+:16] : montg_r_16b_blanked[16*1+:16],
+      sub_carries_out[0] ? sub_diff_16b_blanked[16*0+:16] : montg_r_16b_blanked[16*0+:16]};
+  end
 
   prim_blanker #(.Width(QWLEN)) u_sub_difference_32b_blanker (
     .in_i (sub_difference),
@@ -688,13 +694,16 @@ module otbn_mac_bignum
     .out_o(montg_r_32b_blanked)
   );
 
-  assign all_montg_r_cor[ModVecElen32] =
-    {sub_carries_out[3] ? sub_diff_32b_blanked[32*1+:32] : montg_r_32b_blanked[32*1+:32],
-     sub_carries_out[1] ? sub_diff_32b_blanked[32*0+:32] : montg_r_32b_blanked[32*0+:32]};
-
+  always_comb begin : g_mux_all_montg_r_cor_32b
+    all_montg_r_cor[ModVecElen32] =
+      {sub_carries_out[3] ? sub_diff_32b_blanked[32*1+:32] : montg_r_32b_blanked[32*1+:32],
+      sub_carries_out[1] ? sub_diff_32b_blanked[32*0+:32] : montg_r_32b_blanked[32*0+:32]};
+  end
   // As the conditional subtraction MUXs only get blanked inputs we can use a regular MUX
-  assign montg_r_cor = predec_is_32b ? all_montg_r_cor[ModVecElen32] :
-                                       all_montg_r_cor[ModVecElen16];
+  always_comb begin : g_mux_montg_r_cor
+    montg_r_cor = predec_is_32b ? all_montg_r_cor[ModVecElen32] :
+                                 all_montg_r_cor[ModVecElen16];
+  end
 
   ///////////////////////////////////////////
   // ACC merging for vectorized operations //
@@ -711,7 +720,9 @@ module otbn_mac_bignum
   // montg_r_cor is all zero as the input into the reduction circuit is blanked with
   // u_add_mod_blanker. If we do a modulo multiplication the `montg_r_cor` contains the data but
   // mul_res_blanked is blanked as explained.
-  assign acc_new_qw = mac_predec_bignum_i.is_mod ? montg_r_cor : mul_res_merger;
+  always_comb begin : g_mux_acc_new_qw
+    acc_new_qw = mac_predec_bignum_i.is_mod ? montg_r_cor : mul_res_merger;
+  end
 
   // This blanker is used to zero the ACC register
   prim_blanker #(.Width(WLEN)) u_acc_merger_blanker (
@@ -720,7 +731,7 @@ module otbn_mac_bignum
     .out_o(acc_old)
   );
 
-  always_comb begin
+  always_comb begin : g_acc_merger
     unique case(acc_qw_sel)
       2'd0: acc_merged = {acc_old[QWLEN*1+:3*QWLEN], acc_new_qw};
       2'd1: acc_merged = {acc_old[QWLEN*2+:2*QWLEN], acc_new_qw, acc_old[0+:1*QWLEN]};
@@ -742,8 +753,10 @@ module otbn_mac_bignum
     .out_o(adder_result_blanked)
   );
 
-  assign regular_acc_update_value = operation_i.shift_acc ?
-             {{QWLEN*2{1'b0}}, adder_result_blanked[QWLEN*2+:QWLEN*2]} : adder_result_blanked;
+  always_comb begin : g_mux_regular_acc_update_value
+    regular_acc_update_value = operation_i.shift_acc ?
+      {{QWLEN*2{1'b0}}, adder_result_blanked[QWLEN*2+:QWLEN*2]} : adder_result_blanked;
+  end
 
   /////////////////
   // Flag update //
@@ -788,7 +801,7 @@ module otbn_mac_bignum
   ////////////////
   // ACC update //
   ////////////////
-  always_comb begin
+  always_comb begin : g_acc_update
     acc_no_intg_d = '0;
     unique case (1'b1)
       // Non-encoded inputs have to be encoded before writing to the register.
@@ -1136,28 +1149,29 @@ module otbn_mac_bignum
   // logic [NELENMAC-1:0] expected_vec_mul_elen_ctrl;
 
   // SEC_CM: CTRL.REDUN
-  assign expected_op_en           = mac_en_i;
-  assign expected_vec_elen_onehot = operation_i.vec_elen_onehot;
-  assign expected_mul_type        = operation_i.mul_type;
-  assign expected_is_mod          = (operation_i.mul_type == MacMulVecMod) ||
-                                    (operation_i.mul_type == MacMulVecModLane);
-  assign expected_is_vec          = (operation_i.mul_type == MacMulVecMod) ||
-                                    (operation_i.mul_type == MacMulVecModLane) ||
-                                    (operation_i.mul_type == MacMulVec) ||
-                                    (operation_i.mul_type == MacMulVecLane);
-  assign expected_acc_add_en      = ~operation_i.zero_acc & mac_en_i &
-                                    (operation_i.mul_type == MacMulRegular);
+  always_comb begin : g_predec_checking
+    expected_op_en           = mac_en_i;
+    expected_vec_elen_onehot = operation_i.vec_elen_onehot;
+    expected_mul_type        = operation_i.mul_type;
+    expected_is_mod          = (operation_i.mul_type == MacMulVecMod) ||
+                               (operation_i.mul_type == MacMulVecModLane);
+    expected_is_vec          = (operation_i.mul_type == MacMulVecMod) ||
+                               (operation_i.mul_type == MacMulVecModLane) ||
+                               (operation_i.mul_type == MacMulVec) ||
+                               (operation_i.mul_type == MacMulVecLane);
+    expected_acc_add_en      = ~operation_i.zero_acc & mac_en_i &
+                               (operation_i.mul_type == MacMulRegular);
 
-  assign predec_error_o = |{expected_op_en           != mac_predec_bignum_i.op_en,
-                            expected_vec_elen_onehot != mac_predec_bignum_i.vec_elen_onehot,
-                            expected_mul_type        != mac_predec_bignum_i.mul_type,
-                            expected_is_mod          != mac_predec_bignum_i.is_mod,
-                            expected_is_vec          != mac_predec_bignum_i.is_vec,
-                            expected_acc_add_en      != mac_predec_bignum_i.acc_add_en,
-                            expected_mul_shift_en    != mac_predec_bignum_i.mul_shift_en,
-                            expected_mul_merger_en   != mac_predec_bignum_i.mul_merger_en,
-                            expected_add_res_en      != mac_predec_bignum_i.add_res_en};
-
+    predec_error_o = |{expected_op_en           != mac_predec_bignum_i.op_en,
+                       expected_vec_elen_onehot != mac_predec_bignum_i.vec_elen_onehot,
+                       expected_mul_type        != mac_predec_bignum_i.mul_type,
+                       expected_is_mod          != mac_predec_bignum_i.is_mod,
+                       expected_is_vec          != mac_predec_bignum_i.is_vec,
+                       expected_acc_add_en      != mac_predec_bignum_i.acc_add_en,
+                       expected_mul_shift_en    != mac_predec_bignum_i.mul_shift_en,
+                       expected_mul_merger_en   != mac_predec_bignum_i.mul_merger_en,
+                       expected_add_res_en      != mac_predec_bignum_i.add_res_en};
+  end
   /////////////////////////////////////
   // Register and secure wipe output //
   /////////////////////////////////////

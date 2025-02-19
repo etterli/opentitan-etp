@@ -21,22 +21,32 @@ module otbn_vec_shifter
     assign shifter_in_lower_reverse[i] = shifter_in_lower_i[WLEN-i-1];
   end
 
-  assign shifter_in = {shifter_in_upper_i, shift_right_i ? shifter_in_lower_i
-                                                         : shifter_in_lower_reverse};
+  always_comb begin : g_mux_shifter_in
+    shifter_in = {shifter_in_upper_i, shift_right_i ? shifter_in_lower_i
+                                                    : shifter_in_lower_reverse};
+  end
 
-  assign shifter_out = shifter_in >> shift_amt_i;
+  always_comb begin : g_shifter
+    shifter_out = shifter_in >> shift_amt_i;
+  end
 
   // Mask out overflowing bits of the adjacent vector elements
-  assign shifter_masked = shifter_out[WLEN-1:0] & vector_mask_i;
+  always_comb begin : g_mask
+    shifter_masked = shifter_out[WLEN-1:0] & vector_mask_i;
+  end
 
   // assign shifter_out_lower = (elen_i == VecElen256) ? shifter_out[WLEN-1:0] : shifter_masked;
-  assign shifter_out_lower = shifter_masked;
+  always_comb begin : g_mux_shifter_out
+    shifter_out_lower = shifter_masked;
+  end
 
   for (genvar i = 0; i < WLEN; i++) begin : g_shifter_out_lower_reverse
     assign shifter_out_lower_reverse[i] = shifter_out_lower[WLEN-i-1];
   end
 
-  assign shifter_res_o = shift_right_i ? shifter_out_lower : shifter_out_lower_reverse;
+  always_comb begin : g_res_sel
+    shifter_res_o = shift_right_i ? shifter_out_lower : shifter_out_lower_reverse;
+  end
 
   // Only the lower WLEN bits of the shift result are returned.
   assign unused_shifter_out_upper = shifter_out[WLEN*2-1:WLEN];

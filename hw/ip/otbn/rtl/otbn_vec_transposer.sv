@@ -107,7 +107,9 @@ module otbn_vec_transposer
     .out_o (res_trn2)
   );
 
-  assign result_o = is_trn1_i ? res_trn1 : res_trn2;
+  always_comb begin : g_mux_res_sel
+    result_o = is_trn1_i ? res_trn1 : res_trn2;
+  end
 
   /* // Alternative solution with loops but not onehot encoded
   logic [VLEN-1:0] result_trn1_16b;

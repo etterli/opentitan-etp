@@ -226,7 +226,7 @@ module otbn_alu_bignum
   // selecting any inputs in the one-hot muxes below. The instruction fetch/predecoder stage
   // is driving the selector inputs accordingly.
 
-  always_comb begin
+  always_comb begin : g_expected_flags
     expected_flags_adder_update = '0;
     expected_flags_logic_update = '0;
     expected_flags_mac_update   = '0;
@@ -663,8 +663,10 @@ module otbn_alu_bignum
     .out_o(adder_y_op_a_blanked)
   );
 
-  assign x_res_operand_a_mux_out =
+  always_comb begin : g_x_res_operand_a_mux_out
+    x_res_operand_a_mux_out =
       alu_predec_bignum_i.x_res_operand_a_sel ? adder_x_res : adder_y_op_a_blanked;
+  end
 
   // SEC_CM: DATA_REG_SW.SCA
   prim_blanker #(.Width(WLEN)) u_adder_y_op_shifter_blanked (
@@ -673,9 +675,11 @@ module otbn_alu_bignum
     .out_o(adder_y_op_shifter_res_blanked)
   );
 
-  assign shift_mod_mux_out =
+  always_comb begin : g_shift_mod_mux_out
+    shift_mod_mux_out =
       alu_predec_bignum_i.shift_mod_sel ? adder_y_op_shifter_res_blanked
                                         : mod_no_intg_q_replicated;
+  end
 
   otbn_vec_adder u_vec_adder_y (
   .operand_a_i       (x_res_operand_a_mux_out),
@@ -744,7 +748,7 @@ module otbn_alu_bignum
   logic expected_vec_transposer_en;
   logic expected_vec_transposer_is_trn1;
 
-  always_comb begin
+  always_comb begin : g_control_singals
     // We use a vectorized adder which supports 16b, 32b, 64b, 128b and 256b elements stored in a WDR.
     // This adder is split into 16 16b processing elements.
     // Thus we have a carry for each vector chunk processing element (16b wide)
@@ -1034,10 +1038,12 @@ module otbn_alu_bignum
     .out_o(logical_op_shifter_res_blanked)
   );
 
-  assign logical_res_mux_in[AluOpLogicXor] = logical_op_a_blanked ^ logical_op_shifter_res_blanked;
-  assign logical_res_mux_in[AluOpLogicOr]  = logical_op_a_blanked | logical_op_shifter_res_blanked;
-  assign logical_res_mux_in[AluOpLogicAnd] = logical_op_a_blanked & logical_op_shifter_res_blanked;
-  assign logical_res_mux_in[AluOpLogicNot] = ~logical_op_shifter_res_blanked;
+  always_comb begin : g_logic_part
+    logical_res_mux_in[AluOpLogicXor] = logical_op_a_blanked ^ logical_op_shifter_res_blanked;
+    logical_res_mux_in[AluOpLogicOr]  = logical_op_a_blanked | logical_op_shifter_res_blanked;
+    logical_res_mux_in[AluOpLogicAnd] = logical_op_a_blanked & logical_op_shifter_res_blanked;
+    logical_res_mux_in[AluOpLogicNot] = ~logical_op_shifter_res_blanked;
+  end
 
   // SEC_CM: DATA_REG_SW.SCA
   prim_onehot_mux #(
@@ -1085,7 +1091,7 @@ module otbn_alu_bignum
   ////////////////////////
 
   logic adder_y_res_used;
-  always_comb begin
+  always_comb begin : g_mux_result_selection
     operation_result_o = adder_y_res;
     adder_y_res_used = 1'b1;
 

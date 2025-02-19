@@ -178,7 +178,7 @@ module otbn_predecode
   assign alu_bignum_vec_elen_raw = imem_rdata_i[29:28];
   assign mac_bignum_vec_elen_raw = imem_rdata_i[27:26];
 
-  always_comb begin
+  always_comb begin : g_control_generation
     rf_ren_a_base   = 1'b0;
     rf_ren_b_base   = 1'b0;
     rf_we_a_base    = 1'b0;

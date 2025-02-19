@@ -80,7 +80,7 @@ module otbn_vec_mod_result_selector
   logic [NVecProc-1:0] decision;
 
   // MUX control signal must be blankable
-  always_comb begin
+  always_comb begin : g_decision_generation
     if (is_subtraction_i == 1'b1) begin
       decision = ~carries_x_i;
     end else begin
@@ -133,7 +133,7 @@ module otbn_vec_mod_result_selector
                                                          : result_x_i[i_res*VChunkLEN+:VChunkLEN];
   end
 
-  always_comb begin
+  always_comb begin : g_adder_y_used
     if (is_subtraction_i == 1'b1) begin
       adder_y_used_o = |res_sel;
     end else begin
