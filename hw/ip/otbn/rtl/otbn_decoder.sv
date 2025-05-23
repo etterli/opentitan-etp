@@ -612,8 +612,8 @@ module otbn_decoder
               mac_mul_type_bignum = MacMulVecLane;
             end
 
-            // This supports only 16b and 32b ELEN
-            if (!((mac_vec_elen == VecMacElen16) || (mac_vec_elen == VecMacElen32))) begin
+            // This supports only 32b ELEN
+            if (!(mac_vec_elen == VecMacElen32)) begin
               illegal_insn = 1'b1;
             end
           end
@@ -634,8 +634,8 @@ module otbn_decoder
               mac_mul_type_bignum = MacMulVecModLane;
             end
 
-            // This supports only 16b and 32b ELEN
-            if (!((mac_vec_elen == VecMacElen16) || (mac_vec_elen == VecMacElen32))) begin
+            // This supports only 32b ELEN
+            if (!(mac_vec_elen == VecMacElen32)) begin
               illegal_insn = 1'b1;
             end
           end

@@ -66,7 +66,7 @@ package otbn_pkg;
   parameter int NELEN = 5;
 
   // Number of different ELEN values supported by BN MAC. Update elen_mac_e accordingly
-  parameter int NELENMAC = 3;
+  parameter int NELENMAC = 2;
 
   // Toplevel constants ============================================================================
 
@@ -338,20 +338,19 @@ package otbn_pkg;
   endfunction
 
   // Vector element length type for bignum vec ISA implemented in BN MAC
-  // The instructions supported by BN MAC support 3 types (16b, 32b and 64b).
-  // The 16b and 32b must always be onehot encoded in the lowest 2 bits!
+  // The instructions supported by BN MAC support 2 types (32b and 64b).
+  // The two must be onehot encoded in the lowest 2 bits.
   // See BN MAC module
   // Update NELENMAC acordingly!
-  typedef enum logic [1:0] {
-    VecMacElen16  = 2'h0,
-    VecMacElen32  = 2'h1,
-    VecMacElen64  = 2'h2
+  typedef enum logic {
+    VecMacElen32  = 1'h0,
+    VecMacElen64  = 1'h1
   } elen_mac_e;
 
   function automatic elen_mac_e parse_raw_mac_elen(logic [1:0] elen_raw);
     elen_mac_e elen;
     unique case (elen_raw)
-      2'b00:   elen = VecMacElen16;
+      2'b00:   elen = VecMacElen32;
       2'b01:   elen = VecMacElen32;
       default: elen = VecMacElen64;
     endcase
@@ -585,7 +584,7 @@ package otbn_pkg;
     logic                op_en;
     logic [NELENMAC-1:0] vec_elen_onehot;
     logic [NVecProc-1:0] vec_adder_carry_sel;
-    logic [2:0]          vec_mul_elen_ctrl;
+    logic [1:0]          vec_mul_elen_ctrl;
     logic                is_mod;
     logic                is_vec;
     mac_mul_type_e       mul_type;

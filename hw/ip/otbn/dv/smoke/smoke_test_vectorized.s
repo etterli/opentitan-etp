@@ -236,38 +236,23 @@ bn.trn2.2Q  w13, w6, w7
  * BN.MULV and BN.MULVL *
  ************************/
 addi x2, x0, 0
-la     x3, vec16a0_bnmulv
-bn.lid x2++, 0(x3)
-la     x3, vec16b0_bnmulv
-bn.lid x2++, 0(x3)
 la     x3, vec32a0_bnmulv
 bn.lid x2++, 0(x3)
 la     x3, vec32b0_bnmulv
 bn.lid x2++, 0(x3)
 
-bn.mulv.16H  w10, w0, w1
 bn.mulv.8S   w11, w2, w3
-bn.mulvl.16H w12, w0, w1, 15
 bn.mulvl.8S  w13, w2, w3, 7
 
 /************
  * BN.MULVM *
  ************/
 addi x2, x0, 0
-la     x3, vec16a0_bnmulvm
-bn.lid x2++, 0(x3)
-la     x3, vec16b0_bnmulvm
-bn.lid x2++, 0(x3)
 la     x3, vec32a0_bnmulvm
 bn.lid x2++, 0(x3)
 la     x3, vec32b0_bnmulvm
 bn.lid x2++, 0(x3)
 /* load the modulus into w20 and then into MOD*/
-li           x2, 20
-la           x3, mod16_bnmulvm
-bn.lid       x2, 0(x3)
-bn.wsrw      MOD, w20
-bn.mulvm.16H w10, w0, w1
 li           x2, 20
 la           x3, mod32_bnmulvm
 bn.lid       x2, 0(x3)
@@ -277,33 +262,6 @@ bn.mulvm.8S  w11, w2, w3
 /*************
  * BN.MULVML *
  *************/
-addi x2, x0, 0
-li           x2, 0
-la           x3, mod16_bnmulvml
-bn.lid       x2, 0(x3)
-bn.wsrw      MOD, w0
-addi x2, x0, 0
-la     x3, vec16a_bnmulvml
-bn.lid x2++, 0(x3)
-la     x3, vec16b_bnmulvml
-bn.lid x2++, 0(x3)
-bn.mulvml.16H  w2, w0, w1, 0
-bn.mulvml.16H  w3, w0, w1, 1
-bn.mulvml.16H  w4, w0, w1, 2
-bn.mulvml.16H  w5, w0, w1, 3
-bn.mulvml.16H  w6, w0, w1, 4
-bn.mulvml.16H  w7, w0, w1, 5
-bn.mulvml.16H  w8, w0, w1, 6
-bn.mulvml.16H  w9, w0, w1, 7
-bn.mulvml.16H w10, w0, w1, 8
-bn.mulvml.16H w11, w0, w1, 9
-bn.mulvml.16H w12, w0, w1, 10
-bn.mulvml.16H w13, w0, w1, 11
-bn.mulvml.16H w14, w0, w1, 12
-bn.mulvml.16H w15, w0, w1, 13
-bn.mulvml.16H w16, w0, w1, 14
-bn.mulvml.16H w17, w0, w1, 15
-
 addi x2, x0, 0
 la           x3, mod32_bnmulvml
 bn.lid       x2, 0(x3)

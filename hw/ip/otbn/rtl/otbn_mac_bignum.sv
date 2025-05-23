@@ -47,8 +47,7 @@
  * Cycle 3:  Output   = c + (Tmp)*q mod q = [c + (Tmp)*q]^d (-q)
  *
  * The required constants q and R are expected to be in the MOD WSR at following locations:
- * For 16b: q @ [15:0], R @ [47:32]
- * For 32b: q @ [31:0], R @ [63:32]
+  * For 32b: q @ [31:0], R @ [63:32]
  *
  * The multiplier and adders are vectorized allowing us to compute four 16b or two 32b values at
  * once. Thus for processing the 256b vector (with 16 16b or 8 32b elements) we require
@@ -289,45 +288,17 @@ module otbn_mac_bignum
   // elen signal. This signal contains also a 64b version but we only use the lower 2 bits.
   // !! This requires the onehot encoding to place 16b or 32b always in these bits!
   // TODO: Maybe refactor the onehot to clean this up. Occurs at multiple locations.
-  logic [QWLEN-1:0] all_mod_q [NELENMAC-1];
   logic [QWLEN-1:0] mod_q; // The Montgomery modulus q
-  logic [QWLEN-1:0] all_mod_R [NELENMAC-1];
   logic [QWLEN-1:0] mod_R; // The Montgomery R constant, R = (-q)^-1 mod 2^ELEN
 
   // The modulus and constant in stored in the MOD register at:
-  // 16b: q @ [15:0], R @ [47:32]
   // 32b: q @ [31:0], R @ [63:32]
   // For the vectorized multiplications we have to replicate the constants
-  assign all_mod_q[ModVecElen16]  = {4{mod_no_intg[15:0]}};
-  assign all_mod_q[ModVecElen32]  = {2{mod_no_intg[31:0]}};
-
-  assign all_mod_R[ModVecElen16]  = {4{mod_no_intg[47:32]}};
-  assign all_mod_R[ModVecElen32]  = {2{mod_no_intg[63:32]}};
-
   logic [WLEN-1-64:0] unused_mod;
   assign unused_mod = ~mod_no_intg[WLEN-1:64];
 
-  prim_onehot_mux #(
-    .Width(QWLEN),
-    .Inputs(NELENMAC-1)
-  ) u_mod_q_value_mux (
-    .clk_i,
-    .rst_ni,
-    .in_i  (all_mod_q),
-    .sel_i (mac_predec_bignum_i.vec_elen_onehot[1:0]),
-    .out_o (mod_q)
-  );
-
-  prim_onehot_mux #(
-    .Width(QWLEN),
-    .Inputs(NELENMAC-1)
-  ) u_mod_R_value_mux (
-    .clk_i,
-    .rst_ni,
-    .in_i  (all_mod_R),
-    .sel_i (mac_predec_bignum_i.vec_elen_onehot[1:0]),
-    .out_o (mod_R)
-  );
+  assign mod_q = {2{mod_no_intg[31:0]}};
+  assign mod_R = {2{mod_no_intg[63:32]}};
 
   ///////////////////////////
   // Vectorized multiplier //
@@ -339,24 +310,9 @@ module otbn_mac_bignum
   logic [QWLEN-1:0] qword_a;
   logic [QWLEN-1:0] qword_b;
   logic [QWLEN-1:0] qword_b_lane;
-  logic [QWLEN-1:0] all_qword_b [NELENMAC-1];
 
   // pick the lane index and replicate
-  always_comb begin // TODO: make bound check for lane_index
-    all_qword_b[ModVecElen16]  = {4{operand_b_blanked[operation_i.lane_index*16+:16]}};
-    all_qword_b[ModVecElen32]  = {2{operand_b_blanked[operation_i.lane_index*32+:32]}};
-  end
-
-  prim_onehot_mux #(
-    .Width(QWLEN),
-    .Inputs(NELENMAC-1)
-  ) u_lane_mux (
-    .clk_i ,
-    .rst_ni,
-    .in_i  (all_qword_b),
-    .sel_i (mac_predec_bignum_i.vec_elen_onehot[1:0]),
-    .out_o (qword_b_lane)
-  );
+  assign qword_b_lane = {2{operand_b_blanked[operation_i.lane_index*32+:32]}};
 
   always_comb begin
     unique case (op_a_qw_sel)
@@ -413,7 +369,6 @@ module otbn_mac_bignum
   ///////////////////////////////////////////
   logic             mul_mod_en;
   logic [HWLEN-1:0] mul_res_mod;
-  logic [QWLEN-1:0] all_tmp_value [NELENMAC-1];
   logic [QWLEN-1:0] tmp_value;
 
   // SEC_CM: DATA_REG_SW.SCA
@@ -436,20 +391,7 @@ module otbn_mac_bignum
     endcase
   end
 
-  assign all_tmp_value[ModVecElen16]  = {mul_res_mod[16*6+:16], mul_res_mod[16*4+:16],
-                                         mul_res_mod[16*2+:16], mul_res_mod[16*0+:16]};
-  assign all_tmp_value[ModVecElen32]  = {mul_res_mod[32*2+:32], mul_res_mod[32*0+:32]};
-
-  prim_onehot_mux #(
-    .Width(QWLEN),
-    .Inputs(NELENMAC-1)
-  ) u_tmp_value_mux (
-    .clk_i ,
-    .rst_ni,
-    .in_i  (all_tmp_value),
-    .sel_i (mac_predec_bignum_i.vec_elen_onehot[1:0]),
-    .out_o (tmp_value)
-  );
+  assign tmp_value = {mul_res_mod[32*2+:32], mul_res_mod[32*0+:32]};
 
   always_comb begin
     tmp_no_intg_d = '0;
@@ -461,7 +403,6 @@ module otbn_mac_bignum
 
   // Truncating and blanking for vectorized multiplication without modulo reduction
   logic [HWLEN-1:0] mul_res_blanked;
-  logic [QWLEN-1:0] all_mul_res_merger [NELENMAC-1];
   logic [QWLEN-1:0] mul_res_merger;
 
   // SEC_CM: DATA_REG_SW.SCA
@@ -471,23 +412,12 @@ module otbn_mac_bignum
     .out_o(mul_res_blanked)
   );
 
-  assign all_mul_res_merger[ModVecElen16]  = {mul_res_blanked[16*6+:16], mul_res_blanked[16*4+:16],
-                                              mul_res_blanked[16*2+:16], mul_res_blanked[16*0+:16]};
-  assign all_mul_res_merger[ModVecElen32]  = {mul_res_blanked[32*2+:32], mul_res_blanked[32*0+:32]};
+  assign mul_res_merger = {mul_res_blanked[32*2+:32], mul_res_blanked[32*0+:32]};
 
-  prim_onehot_mux #(
-    .Width(QWLEN),
-    .Inputs(NELENMAC-1)
-  ) u_mul_merger_value_mux (
-    .clk_i ,
-    .rst_ni,
-    .in_i  (all_mul_res_merger),
-    .sel_i (mac_predec_bignum_i.vec_elen_onehot[1:0]),
-    .out_o (mul_res_merger)
-  );
-
-  logic [16+16-1:0] unused_mul_res_blanked;
+  logic [4*16-1:0] unused_mul_res_blanked;
   assign unused_mul_res_blanked = ~{mul_res_blanked[127:112],
+                                    mul_res_blanked[111:96],
+                                    mul_res_blanked[47:32],
                                     mul_res_blanked[63:48]};
 
   // Adder operand blanking and extension
@@ -585,7 +515,6 @@ module otbn_mac_bignum
   /////////////////////////////////////////////
   logic             add_mod_en;
   logic [WLEN-1:0]  adder_result_mod;
-  logic [QWLEN-1:0] all_montg_r [NELENMAC-1];
   logic [QWLEN-1:0] montg_r;
 
   prim_blanker #(.Width(WLEN)) u_add_mod_blanker (
@@ -597,25 +526,14 @@ module otbn_mac_bignum
   // Montgomery upper bit selection
   // Take only the upper ELEN bits of the addition.
   // The result is "r" of the montgomery algorithm
-  assign all_montg_r[ModVecElen16]  = {adder_result_mod[16*7+:16], adder_result_mod[16*5+:16],
-                                    adder_result_mod[16*3+:16], adder_result_mod[16*1+:16]};
-  assign all_montg_r[ModVecElen32]  = {adder_result_mod[32*3+:32], adder_result_mod[32*1+:32]};
+  assign montg_r = {adder_result_mod[32*3+:32], adder_result_mod[32*1+:32]};
 
-  logic [128+16+16-1:0] unused_adder_result_mod;
+  logic [128+4*16-1:0] unused_adder_result_mod;
   assign unused_adder_result_mod = ~{adder_result_mod[255:128],
+                                     adder_result_mod[95:80],
                                      adder_result_mod[79:64],
+                                     adder_result_mod[31:16],
                                      adder_result_mod[15:0]};
-
-  prim_onehot_mux #(
-    .Width(QWLEN),
-    .Inputs(NELENMAC-1)
-  ) u_montg_r_value_mux (
-    .clk_i,
-    .rst_ni,
-    .in_i  (all_montg_r),
-    .sel_i (mac_predec_bignum_i.vec_elen_onehot[1:0]),
-    .out_o (montg_r)
-  );
 
   // Critical path optimization
   // We do not perform the conditional subtraction in the MAC to improve the critical path.

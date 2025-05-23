@@ -27,7 +27,7 @@ module otbn_vec_multiplier_tb
   // Signals to the dut
   logic [63:0]  operand_a, operand_b;
   elen_bignum_e elen;
-  logic [2:0]   elen_ctrl;
+  logic [1:0]   elen_ctrl;
 
   // Signals from the dut
   logic [127:0] result;
@@ -60,10 +60,9 @@ module otbn_vec_multiplier_tb
 
   always_comb begin
     unique case (elen)
-      VecElen16: elen_ctrl = 3'b001;
-      VecElen32: elen_ctrl = 3'b011;
-      VecElen64: elen_ctrl = 3'b111;
-      default:   elen_ctrl = 3'b000;
+      VecElen32: elen_ctrl = 2'b01;
+      VecElen64: elen_ctrl = 2'b11;
+      default:   elen_ctrl = 2'b00;
     endcase
   end
 
