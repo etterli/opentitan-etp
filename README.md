@@ -59,6 +59,9 @@ The actual NTT implementation is at `/sw/otbn/ntt/ntt_mldsa.s` and `/sw/otbn/ntt
 
 ## Optimization
 After synthesis, it was discovered that the new modulo multiplication is relatively huge.
+There are two optimizations implemented.
+
+### Optimization 1: No conditional subtraction
 To optimize the design, a HW-SW optimization was proposed by adapting the implemented Montgomery multiplication (`bn.mulvm`).
 The last step of the Montgomery multiplication is a conditional subtraction.
 This subtraction was implemented in hardware.
@@ -75,9 +78,18 @@ bn.addvm.8S w1, w1, w0 /* where w0 is all-zero */
 The optimized design can be found on the branch `opt-no-subtractor` (0fc63fd8aa988dcda144c81fc6edb5c07b5869eb).
 
 This change results in a smaller design (area wise) and better timing.
-But the total execution time rises from 12 cycles to 13 cycles, resulting in a NTT speed-up of around 3.27x (-5%).
+But the total execution time rises from 12 cycles to 13 cycles, resulting in a NTT speed-up of around 3.27x (-5%) at a fixed clock frequency.
 The relevant benchmarks can be found on the branch `benchmark` (94bdc0a069d3eb3a26dd579350844315fd66e0f1) at `./sw/otbn/ntt/tests/` (`ntt_mldsa_exp_reduction_test.s`, `intt_mldsa_exp_reduction_test.s.s`).
 The actual NTT implementation is at `/sw/otbn/ntt/ntt_mldsa_exp_reduction.s` and `/sw/otbn/ntt/intt_mldsa_exp_reduction.s`, respectively.
+
+### Optimization 2: No 16-bit support
+The resulting design has still a relatively large area overhead and a bad timing.
+As many PCQ schemes don't need 16-bit multiplications, the 16-bit multiplication support is removed.
+This allows to simplify the lane selection and also the vectorized multiplier can be implemented with fewer partial product generations (fewer but larger multipliers).
+With less partial products the side-channel attack (SCA) mitigations can also be reduced, resulting in a better optimized design.
+
+This results in a quite smaller area overhead of only +14% @ 8ns.
+The design can be found on the branch `opt-no16b` (7c4a12c207657cfc422054a4a57c019ff26b2e89).
 
 ## Open Points
 For a full and secure implementation of ML-DSA, future work is definitively required on the following topics:
@@ -89,12 +101,10 @@ For a full and secure implementation of ML-DSA, future work is definitively requ
   This requires further work to investigate whether more memory is required or if there is a smart solution.
 
 ## Future optimization ideas
-### Support only 32-bit elements in BN MAC
-When limiting the supported element width to 32 bits, the BN MAC design could be simplified.
-For example, the lane selection would be simpler and the vectorized multiplier could be implemented with fewer partial product generations (fewer but larger multipliers) and thus less additions and blanking is required.
-In regard to the BN ALU, this limitation is not as beneficial.
-It would only remove some small MUXs inside the vectorized adders and the modulo result selection logic.
-However, these components are quite small in terms of size and are not on the critical path.
+### Support only 32-bit elements in BN ALU
+As shown with the 2nd optimization, dropping the 16-bit support drastically reduced the area overhead.
+This should also be considered for the remaining instructions implemented in the Bignum ALU.
+However, this will mostly bring timing improvements as we can reduce the adder cascade.
 
 ### Opcode complexity tradeoff
 Another idea is to split the complex multiplication instructions into multiple instructions.
