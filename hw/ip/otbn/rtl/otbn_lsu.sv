@@ -17,7 +17,7 @@
 module otbn_lsu
   import otbn_pkg::*;
 #(
-  parameter int DmemSizeByte = 4096,
+  parameter int DmemSizeByte = 32768, // including scratch
 
   localparam int DmemAddrWidth = prim_util_pkg::vbits(DmemSizeByte)
 ) (
