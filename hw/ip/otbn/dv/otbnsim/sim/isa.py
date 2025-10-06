@@ -150,7 +150,6 @@ def logical_byte_shift(value: int, shift_type: int, shift_bytes: int) -> int:
     by.
 
     Returns an unsigned 256-bit value, truncating on an overflowing left shift.
-
     '''
     mask256 = (1 << 256) - 1
     assert 0 <= value <= mask256
@@ -162,8 +161,90 @@ def logical_byte_shift(value: int, shift_type: int, shift_bytes: int) -> int:
     return shifted & mask256
 
 
+def logical_bit_shift(value: int, size: int, shift_type: int, shift_bits: int) -> int:
+    '''Logical shift value by shift_bits to the left or right.
+
+    `value` should be an unsigned `size`-bit value. `shift_type` should be 0 (shift left)
+    or 1 (shift_right), matching the encoding of the big number instructions. shift_bits should be
+    a non-negative number of bits to shift by.
+
+    Returns an unsigned `size`-bit value, truncating on an overflowing left shift.
+    '''
+    mask = (1 << size) - 1
+    assert 0 <= value <= mask
+    assert 0 <= shift_type <= 1
+    assert 0 <= shift_bits
+
+    shifted = value << shift_bits if shift_type == 0 else value >> shift_bits
+    return shifted & mask
+
+
+def extract_sub_word(value: int, size: int, index: int) -> int:
+    '''Extract a `size`-bit word at index `index` from a 256-bit value and
+    interprets it as unsigned integer'''
+    assert 0 <= value < (1 << 256)
+    assert 0 <= index < (256 // size)
+    return (value >> (index * size)) & ((1 << size) - 1)
+
+
 def extract_quarter_word(value: int, qwsel: int) -> int:
     '''Extract a 64-bit quarter word from a 256-bit value.'''
-    assert 0 <= value < (1 << 256)
-    assert 0 <= qwsel <= 3
-    return (value >> (qwsel * 64)) & ((1 << 64) - 1)
+    return extract_sub_word(value, 64, qwsel)
+
+
+def lower_d_bits(value: int, d: int) -> int:
+    '''Extracts the lower d bits of the value.'''
+    return value & ((1 << d) - 1)
+
+
+def upper_d_bits(value: int, d: int) -> int:
+    '''Extracts the upper d bits of the value and shifts them down by d.'''
+    return (value & (((1 << d) - 1) << d)) >> d
+
+
+# Define which element lenghts are supported
+SUPPORTED_ELEN_ADD = [32]
+SUPPORTED_ELEN_MUL = [32]
+SUPPORTED_ELEN_TRN = [32, 64, 128]
+SUPPORTED_ELEN_SHIFT = [32]
+
+
+def extract_element_length(elen: int) -> int:
+    '''Extract the bit size of a vector element from the given element length encoding.
+    The vectorized instructions operate on different element sizes.
+    The bitwidth is defined as:
+    Encoded Value | size name | size in bits
+    0             | .16H      |  16
+    1             | .8S       |  32
+    2             | .4D       |  64
+    3             | .2Q       | 128
+    '''
+    # Create a Dict for a switch like construct
+    length = {0: 16,
+              1: 32,
+              2: 64,
+              3: 128}
+    try:
+        return length[elen]
+    except KeyError:
+        sys.stderr.write('The ELEN ({}) for vector element length is '
+                         'unkown!.\n'.format(elen))
+        sys.exit(1)
+
+
+def montgomery_mul_no_cond_subtraction(a: int, b: int, q: int, R: int, size: int) -> int:
+    '''Performs a Montgomery multiplication but without the final conditional subtraction.
+    The inputs a and b are in Montgomery space.
+    The result is also in Montgomery space.
+
+    Algorithm (where []_d are the lower d bits, []^d are the higher d bits):
+       r = [c + [[c]_d * R]_d * q]^d
+       return r
+    '''
+    reg_c = a * b
+    reg_tmp = lower_d_bits(reg_c, size)
+    reg_tmp = lower_d_bits(reg_tmp * R, size)
+    r = upper_d_bits(reg_c + reg_tmp * q, size)
+    # if r >= q:
+    #     r -= q
+    return r
