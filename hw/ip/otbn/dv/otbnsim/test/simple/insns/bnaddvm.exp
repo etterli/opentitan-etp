@@ -1,0 +1,15 @@
+# Copyright lowRISC contributors (OpenTitan project).
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+
+# 32bit
+w2  = 0xffffffffffffffff003ff000007fe000ffffffff00000000003ff000007fe000
+w3  = 0x000007e800000001002aa000007fdffe000007e87fffffff002aa000007fdffe
+w11 = 0xff8027e6ff801fff006a9000007fdffdff8027e67f801ffe006a9000007fdffd
+
+x2 = 0
+x3 = 0
+
+w20 = 0x00000000000000000000000000000000000000000000000000000000007fe001
+
+INSN_CNT = 16
