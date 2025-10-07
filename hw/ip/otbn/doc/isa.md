@@ -9,6 +9,7 @@ The base subset (described first) is similar to RISC-V's RV32I instruction set.
 It also includes a hardware call stack and hardware loop instructions.
 The big number subset is designed to operate on 256b WDRs.
 It doesn't include any control flow instructions, and just supports load/store, logical and arithmetic operations.
+For some of the logical and arithmetic operations exist packed SIMD variants which interpret the WDRs as vectors of 32b elements.
 
 In the instruction documentation that follows, each instruction has a syntax example.
 For example, the `SW` instruction has syntax:
@@ -100,6 +101,8 @@ def extract_quarter_word(value: int, qwsel: int) -> int:
     assert 0 <= value < (1 << 256)
     assert 0 <= qwsel <= 3
     return (value >> (qwsel * 64)) & ((1 << 64) - 1)
+
+TODO add new helpers
 ```
 
 # Errors

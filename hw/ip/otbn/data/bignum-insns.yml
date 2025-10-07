@@ -957,3 +957,443 @@
   lsu:
     type: wsr-store
     target: [wsr]
+
+- mnemonic: bn.addv
+  synopsis: Add vector elementwise
+  operands: &bn-addv-operands
+    - &bn-elen
+      name: elen
+      type: enum(.16H,.8S,.4D,.2Q)
+      doc: |
+        Select the bitwidth of the vector elements.
+
+        Valid values:
+        - `.8S`: interprets the WDRs as 8 32 bit elements
+
+        Reserved values (not implemented):
+        - `.16H`: interprets the WDRs as 16 16 bit elements
+        - `.4D`: interprets the WDRs as 4 64 bit elements
+        - `.2Q`: interprets the WDRs as 2 128 bit elements
+    - name: wrd
+      doc: Name of the destination WDR
+    - name: wrs1
+      doc: Name of the first source WDR
+    - name: wrs2
+      doc: Name of the second source WDR
+  syntax: &bn-addv-syntax |
+    <elen> <wrd>, <wrs1>, <wrs2>
+  glued-ops: true
+  doc: |
+    Add two WDR registers interpreted as vectors elementwise.
+
+    The values in `wrs1` and `wrs2` are interpreted as vectors with unsigned elements of size given by `elen`.
+    The elements are individually summed.
+
+    Each result element is truncated to the element length (depending on `elen`) and stored in `wrd`.
+
+    Flags are not used or saved.
+  errs:
+    - &bad-elen An `ILLEGAL_INSN` error if `elen` doesn't match a valid choice.
+  encoding:
+    scheme: bnva
+    mapping:
+      sub: b0
+      mod: b0
+      elen: elen
+      wrs2: wrs2
+      wrs1: wrs1
+      funct3: b000
+      wrd: wrd
+
+- mnemonic: bn.addvm
+  synopsis: Pseudo-Modulo add vector elementwise
+  operands: *bn-addv-operands
+  syntax: *bn-addv-syntax
+  glued-ops: true
+  doc: |
+    Add two WDR registers interpreted as vectors elementwise and reduce the results by the `MOD` WSR.
+
+    The values in `wrs1` and `wrs2` are interpreted as vectors with unsigned elements of size given by `elen`.
+    The elements are individually summed.
+    If the individual result is equal or larger than `MOD`, `MOD` is subtracted from it.
+
+    Each result element is truncated to the element length (depending on `elen`) and stored in `wrd`.
+
+    This operation correctly implements addition modulo `MOD`, providing that the intermediate result is less than `2 * MOD`.
+    The intermediate result is small enough if both inputs are less than `MOD`.
+
+    Flags are not used or saved.
+  errs:
+    - *bad-elen
+  iflow:
+    - to: [wrd]
+      from: [wrs1, wrs2, mod]
+  encoding:
+    scheme: bnva
+    mapping:
+      sub: b0
+      mod: b1
+      elen: elen
+      wrs2: wrs2
+      wrs1: wrs1
+      funct3: b000
+      wrd: wrd
+
+- mnemonic: bn.subv
+  synopsis: Subtract vector elementwise
+  operands: *bn-addv-operands
+  syntax: *bn-addv-syntax
+  glued-ops: true
+  doc: |
+    Subtract `wrs2` from `wrs1` interpreted as vectors elementwise.
+
+    The values in `wrs1` and `wrs2` are interpreted as vectors with unsigned elements of size given by `elen`.
+    The elements are individually subtracted.
+
+    Each result is truncated to the element length (depending on `elen`) and stored in `wrd`.
+
+    Flags are not used or saved.
+  errs:
+    - *bad-elen
+  encoding:
+    scheme: bnva
+    mapping:
+      sub: b1
+      mod: b0
+      elen: elen
+      wrs2: wrs2
+      wrs1: wrs1
+      funct3: b000
+      wrd: wrd
+
+- mnemonic: bn.subvm
+  synopsis: Pseudo-Modulo subtract vector elementwise
+  operands: *bn-addv-operands
+  syntax: *bn-addv-syntax
+  glued-ops: true
+  doc: |
+    Subtract `wrs2` from `wrs1` interpreted as vectors elementwise and reduce the result by the `MOD` WSR.
+
+    The values in `wrs1` and `wrs2` are interpreted as vectors with unsigned elements of size given by `elen`.
+    The elements are individually subtracted.
+    The intermediate results are treated as a signed number.
+    If they are negative, `MOD` is added to the results.
+    The results are then truncated to the element length (depending on `elen`) and stored in `wrd`.
+
+    This operation correctly implements subtraction modulo `MOD`, providing that the intermediate result are at least `-MOD` and at most `MOD - 1`.
+    This is guaranteed if both inputs are less than `MOD`.
+
+    Flags are not used or saved.
+  errs:
+    - *bad-elen
+  iflow:
+    - to: [wrd]
+      from: [wrs1, wrs2, mod]
+  encoding:
+    scheme: bnva
+    mapping:
+      sub: b1
+      mod: b1
+      elen: elen
+      wrs2: wrs2
+      wrs1: wrs1
+      funct3: b000
+      wrd: wrd
+
+- mnemonic: bn.mulv
+  synopsis: Elementwise vector multiplication
+  operands: &bn-mulv-operands
+    - &bn-elen-mul
+      name: elen
+      type: enum(.16H,.8S)
+      doc: |
+        Select the bitwidth of the vector elements.
+
+        Valid values:
+        - `.8S`: interprets the WDRs as 8 32 bit elements
+
+        Reserved values (not implemented):
+        - `.16H`: interprets the WDRs as 16 16 bit elements
+    - name: wrd
+      doc: Name of the destination WDR
+    - name: wrs1
+      doc: Name of the first source WDR
+    - name: wrs2
+      doc: Name of the second source WDR
+  syntax: &bn-mulv-syntax |
+    <elen> <wrd>, <wrs1>, <wrs2>
+  glued-ops: true
+  doc: |
+    Multiply two WDR registers interpreted as vectors elementwise.
+
+    The values in `wrs1` and `wrs2` are interpreted as vectors with elements of size depending on `elen` and are considered as unsigned.
+
+    Each result element is truncated to the element length (depending on `elen`) and stored in `wrd`.
+
+    To save on area, the OTBN features only a single 64 bit multiplier.
+    This instruction therefore processes the 256 bit vectors in 4 chunks and thus requires 4 cycles to execute.
+
+    Flags are not used or saved.
+  errs:
+    - *bad-elen
+  iflow:
+    - to: [wrd]
+      from: [wrs1, wrs2]
+  encoding:
+    scheme: bnvm
+    mapping:
+      lane: bxxxx
+      use_lane: b0
+      elen: elen
+      wrs2: wrs2
+      wrs1: wrs1
+      funct3: b011
+      wrd: wrd
+
+- mnemonic: bn.mulvl
+  synopsis: Elementwise vector multiplication with fixed lane
+  operands: &bn-mulvl-operands
+    - *bn-elen-mul
+    - name: wrd
+      doc: Destination WDR
+    - name: wrs1
+      doc: First source WDR
+    - name: wrs2
+      doc: Second source WDR
+    - name: lane
+      doc: |
+        Select the lane of the `wrs2` to multiply `wrs1` with.
+        The valid range depends on the `elen` operand!
+
+      type: uimm4
+  syntax: &bn-mulvl-syntax |
+    <elen> <wrd>, <wrs1>, <wrs2>, <lane>
+  glued-ops: true
+  doc: |
+    Multiply each vector element of `wrs1` with element `lane` of `wrs2`.
+
+    The values in `wrs1` and `wrs2` are interpreted as vectors with elements of size depending on `elen` and are considered as unsigned.
+
+    Each result element is truncated to the element length (depending on `elen`) and stored in `wrd`.
+
+    To save on area, the OTBN features only a single 64 bit multiplier.
+    This instruction therefore processes the 256 bit vectors in 4 chunks and thus requires 4 cycles to execute.
+
+    Flags are not used or saved.
+  errs:
+    - *bad-elen
+  iflow:
+    - to: [wrd]
+      from: [wrs1, wrs2]
+  encoding:
+    scheme: bnvm
+    mapping:
+      lane: lane
+      use_lane: b1
+      elen: elen
+      wrs2: wrs2
+      wrs1: wrs1
+      funct3: b011
+      wrd: wrd
+
+- mnemonic: bn.mulvm
+  synopsis: Elementwise vector Montgomery multiplication
+  operands: *bn-mulv-operands
+  syntax: *bn-mulv-syntax
+  glued-ops: true
+  doc: |
+    Performs an elementwise Montgomery multiplication on the two WDRs without the final conditional subtraction.
+    The values in `wrs1` and `wrs2` are interpreted as vectors with elements of size depending on `elen` and are considered as unsigned.
+    Each result element is truncated to the element length (depending on `elen`) and stored in `wrd`.
+    The result is correct if each input element is in `[0, q)`.
+    However, the conditional subtraction step of the Montgomery algorithm is not implemented in hardware and must be performed with a software instruction (see below).
+
+    **Montgomery explanation**\\
+    Variables:
+    - `a, b`: Operands in `[0, q[` (i.e., WDR vector elements)
+    - `d`:   Bitwith of operands
+    - `q`:   Modulus in `]0, 2^d]`
+    - `R`:   Montgomery constant, precomputed, `R = (-q)^(-1) mod 2^d`
+
+    The operands must be pre-transformed into Montgomery space with `a = a_orig * 2^d mod q`.
+    This must be ensured by the programmer.
+
+    The result is (`r` in `[0,q[`):
+    ```
+    r = a*b * 2^(-d) mod q
+    ```
+
+    This can be computed with the following steps where `[]_d` are the lower `d` bits and `[]^d` are the higher `d` bits:
+    ```
+    c = a*b
+    r = [c + [[c]_d * R]_d * q]^d
+    if r >= q then // not implemented in hardware
+        return r - q
+    return r
+    ```
+
+    This instruction computes these steps except the final conditional subtraction (`r >= q`) to optimize area and timing.
+    The conditional subtraction therefore must be performed with software, e.g. using a pseudo modulo addition (`BN.ADDVM`) with a zero vector.
+
+    **Execution**\\
+    To save on area, the OTBN features only a single 64 bit multiplier.
+    As a consequence, the 256 bit vectors are split into 4 chunks which are processed sequentially.
+    In addition, the Montgomery implementation requires 3 multiplications which are also serialized.
+    The instruction therefore takes 12 cycles to complete.
+
+    **Pre-requisistes**\\
+    This instruction requires the modulus `q` and its corresponding Montgomery constant `R` to be placed in the MOD WSR at the following location:\\
+    For 16b: `q @ MOD[15:0]`, `R @ MOD[47:32]` (reserved, not implemented)\\
+    For 32b: `q @ MOD[31:0]`, `R @ MOD[63:32]`
+
+    Flags are not used or saved.
+  errs:
+    - *bad-elen
+  iflow:
+    - to: [wrd]
+      from: [wrs1, wrs2, mod]
+  encoding:
+    scheme: bnvm
+    mapping:
+      lane: bxxxx
+      use_lane: b0
+      elen: elen
+      wrs2: wrs2
+      wrs1: wrs1
+      funct3: b100
+      wrd: wrd
+
+- mnemonic: bn.mulvml
+  synopsis: Elementwise vector Montgomery multiplication with fixed lane
+  operands: *bn-mulvl-operands
+  syntax: *bn-mulvl-syntax
+  glued-ops: true
+  doc: |
+    Perform an elementwise Montgomery multiplication without the final conditional subtraction on each element of `wrs1` with element `lane` of `wrs2`.
+
+    See `BN.MULVM` for explanations about the Montgomery algorithm and the implementation details.
+
+    This instruction requires the input operands to be transformed into the Montgomery space and takes 12 cycles.
+    For a correct result, a conditional subtraction (`r >= q`) must be performed after this instruction, e.g., with `BN.ADDVM`.
+
+    This instruction requires the modulus `q` and its corresponding Montgomery constant `R` to be placed in the MOD WSR at the following location:\\
+    For 16b: `q @ MOD[15:0]`, `R @ MOD[47:32]` (reserved, not implemented)\\
+    For 32b: `q @ MOD[31:0]`, `R @ MOD[63:32]`
+
+    Flags are not used or saved.
+  errs:
+    - *bad-elen
+  iflow:
+    - to: [wrd]
+      from: [wrs1, wrs2, mod]
+  encoding:
+    scheme: bnvm
+    mapping:
+      lane: lane
+      use_lane: b1
+      elen: elen
+      wrs2: wrs2
+      wrs1: wrs1
+      funct3: b100
+      wrd: wrd
+
+- mnemonic: bn.trn1
+  synopsis: Interleave vectors in even fashion
+  operands: &bn-trn-operands
+    - name: elen
+      type: enum(.16H,.8S,.4D,.2Q)
+      doc: |
+        Select the bitwidth of the vector elements.
+
+        Valid values:
+        - `.8S`: interprets the WDRs as 8 32 bit elements
+        - `.4D`: interprets the WDRs as 4 64 bit elements
+        - `.2Q`: interprets the WDRs as 2 128 bit elements
+
+        Reserved values (not implemented):
+        - `.16H`: interprets the WDRs as 16 16 bit elements
+    - name: wrd
+      doc: Destination WDR
+    - name: wrs1
+      doc: First source WDR
+    - name: wrs2
+  syntax: &bn-trn-syntax
+    <elen> <wrd>, <wrs1>, <wrs2>
+  glued-ops: true
+  doc: |
+    Even-numbered vector elements from `wrs1` are placed into even-numbered elements of `wrd`.
+    Even-numbered vector elements from `wrs2` are placed into odd-numbered elements of `wrd`.
+
+    Resulting in: `wrd[0] <= wrs1[0]` and `wrd[1] <= wrs2[0]` which is repeated for all indices of wrd.
+
+    Flags are not used or saved.
+  errs:
+    - *bad-elen
+  encoding:
+    scheme: bnvtrn
+    mapping:
+      odd: b0
+      elen: elen
+      wrs2: wrs2
+      wrs1: wrs1
+      funct3: b101
+      wrd: wrd
+
+- mnemonic: bn.trn2
+  synopsis: Interleave vectors in odd fashion
+  operands: *bn-trn-operands
+  syntax: *bn-trn-syntax
+  glued-ops: true
+  doc: |
+    Odd-numbered vector elements from `wrs1` are placed into even-numbered elements of `wrd`.
+    Odd-numbered vector elements from `wrs2` are placed into odd-numbered elements of `wrd`.
+
+    Resulting in: `wrd[0] <= wrs1[1]` and `wrd[1] <= wrs2[1]` which is repeated for all indices of wrd.
+
+    Flags are not used or saved.
+  errs:
+    - *bad-elen
+  encoding:
+    scheme: bnvtrn
+    mapping:
+      odd: b1
+      elen: elen
+      wrs2: wrs2
+      wrs1: wrs1
+      funct3: b101
+      wrd: wrd
+
+- mnemonic: bn.shv
+  synopsis: Bitwise logical shift on individual vector elements
+  operands:
+    - *bn-elen
+    - name: wrd
+      doc: Name of the destination WDR
+    - name: wrs
+      doc: Name of the source WDR
+    - name: shift_type
+      abbrev: st
+      type: enum(<<, >>)
+      doc: |
+        The direction of the shift applied to elements of `wrs`.
+    - name: shift_bits
+      type: uimm7
+      doc: Number of bits by which to shift elements in `wrs`. Defaults to 0.
+  syntax: <elen> <wrd>, <wrs> <shift_type> <shift_bits>
+  glued-ops: true
+  doc: |
+    Logically shifts each element of vector `wrs` by `shift_bits` in `shift_type` direction.
+    The element size is given by `elen`.
+
+    Flags are not used or saved.
+  errs:
+    - *bad-elen
+  encoding:
+    scheme: bnvsh
+    mapping:
+      shift_type: shift_type
+      shift_bits: shift_bits
+      elen: elen
+      wrs: wrs
+      funct3: b111
+      wrd: wrd
