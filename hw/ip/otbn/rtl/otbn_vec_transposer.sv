@@ -24,20 +24,20 @@
 module otbn_vec_transposer
   import otbn_pkg::*;
 (
-  input  logic[VLEN-1:0] operand_a_i,
-  input  logic[VLEN-1:0] operand_b_i,
-  input  logic           is_trn1_i,
-  // Ugly: elen_bignum_e contains the 256b variant but we don't support it and return 'b0
-  // TODO: Finda a cleaner solution, maybe crash?
-  input  elen_bignum_e   elen_i,
-
-  output logic[VLEN-1:0] result_o
+  input  logic[VLEN-1:0]   operand_a_i,
+  input  logic[VLEN-1:0]   operand_b_i,
+  input  logic             is_trn1_i,
+  input  logic [NELEN-1:0] elen_onehot_i,
+  output logic[VLEN-1:0]   result_o
 );
   typedef struct packed {
     logic [15:0] chunk;
   } vector_chunk_t;
 
-  logic [VLEN-1:0] res_trn1, res_trn2;
+  logic [VLEN-1:0] res_trn1;
+  logic [VLEN-1:0] res_trn2;
+  logic [VLEN-1:0] res_trn1_all [NELEN];
+  logic [VLEN-1:0] res_trn2_all [NELEN];
 
   vector_chunk_t [15:0] vec_a;
   vector_chunk_t [15:0] vec_b;
@@ -45,52 +45,71 @@ module otbn_vec_transposer
   assign vec_a = operand_a_i;
   assign vec_b = operand_b_i;
 
-  always_comb begin
-    if (elen_i == VecElen16) begin
-      res_trn1 = {vec_b[14], vec_a[14], vec_b[12], vec_a[12],
-                  vec_b[10], vec_a[10], vec_b[ 8], vec_a[ 8],
-                  vec_b[ 6], vec_a[ 6], vec_b[ 4], vec_a[ 4],
-                  vec_b[ 2], vec_a[ 2], vec_b[ 0], vec_a[ 0]};
-      res_trn2 = {vec_b[15], vec_a[15], vec_b[13], vec_a[13],
-                  vec_b[11], vec_a[11], vec_b[ 9], vec_a[ 9],
-                  vec_b[ 7], vec_a[ 7], vec_b[ 5], vec_a[ 5],
-                  vec_b[ 3], vec_a[ 3], vec_b[ 1], vec_a[ 1]};
-    end else if (elen_i == VecElen32) begin
-      res_trn1 = {vec_b[13], vec_b[12], vec_a[13], vec_a[12],
-                  vec_b[ 9], vec_b[ 8], vec_a[ 9], vec_a[ 8],
-                  vec_b[ 5], vec_b[ 4], vec_a[ 5], vec_a[ 4],
-                  vec_b[ 1], vec_b[ 0], vec_a[ 1], vec_a[ 0]};
-      res_trn2 = {vec_b[15], vec_b[14], vec_a[15], vec_a[14],
-                  vec_b[11], vec_b[10], vec_a[11], vec_a[10],
-                  vec_b[ 7], vec_b[ 6], vec_a[ 7], vec_a[ 6],
-                  vec_b[ 3], vec_b[ 2], vec_a[ 3], vec_a[ 2]};
-    end else if (elen_i == VecElen64) begin
-      res_trn1 = {vec_b[11], vec_b[10], vec_b[ 9], vec_b[ 8],
-                  vec_a[11], vec_a[10], vec_a[ 9], vec_a[ 8],
-                  vec_b[ 3], vec_b[ 2], vec_b[ 1], vec_b[ 0],
-                  vec_a[ 3], vec_a[ 2], vec_a[ 1], vec_a[ 0]};
-      res_trn2 = {vec_b[15], vec_b[14], vec_b[13], vec_b[12],
-                  vec_a[15], vec_a[14], vec_a[13], vec_a[12],
-                  vec_b[ 7], vec_b[ 6], vec_b[ 5], vec_b[ 4],
-                  vec_a[ 7], vec_a[ 6], vec_a[ 5], vec_a[ 4]};
-    end else if (elen_i == VecElen128) begin
-      res_trn1 = {vec_b[ 7], vec_b[ 6], vec_b[ 5], vec_b[ 4],
-                  vec_b[ 3], vec_b[ 2], vec_b[ 1], vec_b[ 0],
-                  vec_a[ 7], vec_a[ 6], vec_a[ 5], vec_a[ 4],
-                  vec_a[ 3], vec_a[ 2], vec_a[ 1], vec_a[ 0]};
-      res_trn2 = {vec_b[15], vec_b[14], vec_b[13], vec_b[12],
-                  vec_b[11], vec_b[10], vec_b[ 9], vec_b[ 8],
-                  vec_a[15], vec_a[14], vec_a[13], vec_a[12],
-                  vec_a[11], vec_a[10], vec_a[ 9], vec_a[ 8]};
-    end else begin
-      // TODO: we do not support 256b -> crash with assertion?
-      res_trn1 = '0;
-      res_trn2 = '0;
-    end
-  result_o = is_trn1_i ? res_trn1 : res_trn2;
-  end
+  assign res_trn1_all[VecElen16]  = {vec_b[14], vec_a[14], vec_b[12], vec_a[12],
+                                     vec_b[10], vec_a[10], vec_b[ 8], vec_a[ 8],
+                                     vec_b[ 6], vec_a[ 6], vec_b[ 4], vec_a[ 4],
+                                     vec_b[ 2], vec_a[ 2], vec_b[ 0], vec_a[ 0]};
+  assign res_trn2_all[VecElen16]  = {vec_b[15], vec_a[15], vec_b[13], vec_a[13],
+                                     vec_b[11], vec_a[11], vec_b[ 9], vec_a[ 9],
+                                     vec_b[ 7], vec_a[ 7], vec_b[ 5], vec_a[ 5],
+                                     vec_b[ 3], vec_a[ 3], vec_b[ 1], vec_a[ 1]};
 
-  /* // Alternative solution with loops
+  assign res_trn1_all[VecElen32]  = {vec_b[13], vec_b[12], vec_a[13], vec_a[12],
+                                     vec_b[ 9], vec_b[ 8], vec_a[ 9], vec_a[ 8],
+                                     vec_b[ 5], vec_b[ 4], vec_a[ 5], vec_a[ 4],
+                                     vec_b[ 1], vec_b[ 0], vec_a[ 1], vec_a[ 0]};
+  assign res_trn2_all[VecElen32]  = {vec_b[15], vec_b[14], vec_a[15], vec_a[14],
+                                     vec_b[11], vec_b[10], vec_a[11], vec_a[10],
+                                     vec_b[ 7], vec_b[ 6], vec_a[ 7], vec_a[ 6],
+                                     vec_b[ 3], vec_b[ 2], vec_a[ 3], vec_a[ 2]};
+
+  assign res_trn1_all[VecElen64]  = {vec_b[11], vec_b[10], vec_b[ 9], vec_b[ 8],
+                                     vec_a[11], vec_a[10], vec_a[ 9], vec_a[ 8],
+                                     vec_b[ 3], vec_b[ 2], vec_b[ 1], vec_b[ 0],
+                                     vec_a[ 3], vec_a[ 2], vec_a[ 1], vec_a[ 0]};
+  assign res_trn2_all[VecElen64]  = {vec_b[15], vec_b[14], vec_b[13], vec_b[12],
+                                     vec_a[15], vec_a[14], vec_a[13], vec_a[12],
+                                     vec_b[ 7], vec_b[ 6], vec_b[ 5], vec_b[ 4],
+                                     vec_a[ 7], vec_a[ 6], vec_a[ 5], vec_a[ 4]};
+
+  assign res_trn1_all[VecElen128] = {vec_b[ 7], vec_b[ 6], vec_b[ 5], vec_b[ 4],
+                                     vec_b[ 3], vec_b[ 2], vec_b[ 1], vec_b[ 0],
+                                     vec_a[ 7], vec_a[ 6], vec_a[ 5], vec_a[ 4],
+                                     vec_a[ 3], vec_a[ 2], vec_a[ 1], vec_a[ 0]};
+  assign res_trn2_all[VecElen128] = {vec_b[15], vec_b[14], vec_b[13], vec_b[12],
+                                     vec_b[11], vec_b[10], vec_b[ 9], vec_b[ 8],
+                                     vec_a[15], vec_a[14], vec_a[13], vec_a[12],
+                                     vec_a[11], vec_a[10], vec_a[ 9], vec_a[ 8]};
+
+  // This ELEN is not supported. We simply return operand a. TODO: abort with assertion
+  assign res_trn1_all[VecElen256] = operand_a_i;
+  assign res_trn2_all[VecElen256] = operand_a_i;
+
+  prim_onehot_mux #(
+    .Width(VLEN),
+    .Inputs(NELEN)
+  ) u_vec_transposer_elen_trn1_mux (
+    .clk_i (),
+    .rst_ni(),
+    .in_i  (res_trn1_all),
+    .sel_i (elen_onehot_i),
+    .out_o (res_trn1)
+  );
+
+  prim_onehot_mux #(
+    .Width(VLEN),
+    .Inputs(NELEN)
+  ) u_vec_transposer_elen_trn2_mux (
+    .clk_i (),
+    .rst_ni(),
+    .in_i  (res_trn2_all),
+    .sel_i (elen_onehot_i),
+    .out_o (res_trn2)
+  );
+
+  assign result_o = is_trn1_i ? res_trn1 : res_trn2;
+
+  /* // Alternative solution with loops but not onehot encoded
   logic [VLEN-1:0] result_trn1_16b;
   logic [VLEN-1:0] result_trn1_32b;
   logic [VLEN-1:0] result_trn1_64b;

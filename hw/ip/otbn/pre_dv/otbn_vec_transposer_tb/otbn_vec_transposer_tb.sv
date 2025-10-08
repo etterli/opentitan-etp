@@ -29,6 +29,7 @@ module otbn_vec_transposer_tb
   logic [VLEN-1:0] operand_b;
   logic            is_trn1;
   elen_bignum_e    elen;
+  logic [NELEN-1:0]    elen_onehot;
 
   // Signals from the dut
   logic [VLEN-1:0] result;
@@ -38,11 +39,11 @@ module otbn_vec_transposer_tb
   ///////////////
   // The tested module must be named "dut" (see run.tcl)
   otbn_vec_transposer dut (
-    .operand_a_i (operand_a),
-    .operand_b_i (operand_b),
-    .is_trn1_i   (is_trn1),
-    .elen_i      (elen),
-    .result_o    (result)
+    .operand_a_i(operand_a),
+    .operand_b_i(operand_b),
+    .is_trn1_i  (is_trn1),
+    .elen_onehot_i   (elen_onehot),
+    .result_o   (result)
   );
 
   ///////////////
@@ -59,6 +60,14 @@ module otbn_vec_transposer_tb
              exp_response_queue[$];
 
   integer n_errs, n_checks, all_stim_applied;
+
+  prim_onehot_enc #(
+    .OneHotWidth (NELEN)
+  ) u_elen_onehot (
+    .in_i (elen),
+    .en_i ('1), // always enable
+    .out_o(elen_onehot)
+  );
 
   initial begin : application_block
     response_t gold_response;
