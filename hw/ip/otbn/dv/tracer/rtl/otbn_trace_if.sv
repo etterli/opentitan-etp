@@ -269,14 +269,14 @@ interface otbn_trace_if
     (insn_fetch_resp_valid &
      (alu_bignum_operation.op inside {AluOpBignumAddm, AluOpBignumSubm}));
 
-  assign ispr_write[IsprAcc] = u_otbn_mac_bignum.acc_en & ~ispr_init;
+  assign ispr_write[IsprAcc] = u_otbn_mac_bignum.acc_wr_en & ~ispr_init;
 
   assign ispr_read[IsprAcc] = (any_ispr_read & (ispr_addr == IsprAcc)) | mac_bignum_en;
   // For ISPR reads look at the ACC flops directly. For other ACC reads look at the `acc_blanked`
   // signal in order to read ACC as 0 for the BN.MULQACC.Z instruction variant.
   assign ispr_read_data[IsprAcc] =
       (any_ispr_read & (ispr_addr == IsprAcc)) ? u_otbn_mac_bignum.acc_no_intg_q  :
-                                                 u_otbn_mac_bignum.acc_blanked;
+                                                 u_otbn_mac_bignum.acc_add_blanked;
 
   assign ispr_write[IsprRnd] = 1'b0;
   assign ispr_write_data[IsprRnd] = '0;

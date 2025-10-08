@@ -47,6 +47,7 @@ filesets:
       - rtl/otbn_vec_mod_result_selector.sv
       - rtl/otbn_vec_shifter.sv
       - rtl/otbn_vec_transposer.sv
+      - rtl/otbn_vec_multiplier.sv
     file_type: systemVerilogSource
 
   files_rtl_top:

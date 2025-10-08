@@ -334,6 +334,14 @@ package otbn_pkg;
     return elen;
   endfunction
 
+  typedef enum logic [2:0] {
+    MacMulRegular,
+    MacMulVec,
+    MacMulVecLane,
+    MacMulVecMod,
+    MacMulVecModLane
+  } mac_mul_type_e;
+
   // Regfile write data selection
   typedef enum logic [2:0] {
     RfWdSelEx,
@@ -496,6 +504,10 @@ package otbn_pkg;
     logic                    mac_zero_acc;
     logic                    mac_shift_out;
     logic                    mac_en;
+    logic                    mac_is_vec;
+    mac_mul_type_e           mac_mul_type;
+    logic [NELEN-1:0]        mac_vec_elen_onehot;
+    logic [3:0]              mac_lane_index;
 
     logic                    rf_we;
     rf_wd_sel_e              rf_wdata_sel;
@@ -546,8 +558,17 @@ package otbn_pkg;
   } ispr_predec_bignum_t;
 
   typedef struct packed {
-    logic op_en;
-    logic acc_rd_en;
+    logic                op_en;
+    logic [NELEN-1:0]    vec_elen_onehot;
+    logic [NVecProc-1:0] vec_adder_carry_sel;
+    logic [3:0]          vec_sub_carry_sel;
+    logic                is_mod;
+    logic                is_vec;
+    mac_mul_type_e       mul_type;
+    logic                mul_shift_en;
+    logic                mul_merger_en;
+    logic                add_res_en;
+    logic                acc_add_en;
   } mac_predec_bignum_t;
 
   typedef struct packed {
@@ -587,14 +608,17 @@ package otbn_pkg;
   } alu_bignum_operation_t;
 
   typedef struct packed {
-    logic [WLEN-1:0] operand_a;
-    logic [WLEN-1:0] operand_b;
-    logic [1:0]      operand_a_qw_sel;
-    logic [1:0]      operand_b_qw_sel;
-    logic            wr_hw_sel_upper;
-    logic [1:0]      pre_acc_shift_imm;
-    logic            zero_acc;
-    logic            shift_acc;
+    logic [WLEN-1:0]  operand_a;
+    logic [WLEN-1:0]  operand_b;
+    logic [1:0]       operand_a_qw_sel;
+    logic [1:0]       operand_b_qw_sel;
+    logic             wr_hw_sel_upper;
+    logic [1:0]       pre_acc_shift_imm;
+    logic             zero_acc;
+    logic             shift_acc;
+    mac_mul_type_e    mul_type;
+    logic [NELEN-1:0] vec_elen_onehot;
+    logic [3:0]       lane_index;
   } mac_bignum_operation_t;
 
   // Encoding generated with:
