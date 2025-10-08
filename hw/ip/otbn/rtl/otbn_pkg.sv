@@ -62,8 +62,11 @@ package otbn_pkg;
   // Number of vector chunk processing elements
   parameter int NVecProc = VLEN / VChunkLEN;
 
-  // Number of different ELEN values udpate elen_bignum_e acordingly
+  // Number of different ELEN values supported by BN ALU. Udpate elen_bignum_e accordingly
   parameter int NELEN = 5;
+
+  // Number of different ELEN values supported by BN MAC. Update elen_mac_e accordingly
+  parameter int NELENMAC = 3;
 
   // Toplevel constants ============================================================================
 
@@ -309,7 +312,7 @@ package otbn_pkg;
     ImmBaseBX
   } imm_b_sel_base_e;
 
-  // Vector element length type for bignum vec ISA
+  // Vector element length type for bignum vec ISA implemented in BN ALU
   // The ISA forsees only 4 types (16 to 128 bits). However, some regular and
   // vectorized instructions share the hardware and thus we need a 256b type
   // to signal "regular" 256b operation. See for example AluOpBignumAddm.
@@ -330,6 +333,27 @@ package otbn_pkg;
       2'b01: elen = VecElen32;
       2'b10: elen = VecElen64;
       2'b11: elen = VecElen128;
+    endcase
+    return elen;
+  endfunction
+
+  // Vector element length type for bignum vec ISA implemented in BN MAC
+  // The instructions supported by BN MAC support 3 types (16b, 32b and 64b).
+  // The 16b and 32b must always be onehot encoded in the lowest 2 bits!
+  // See BN MAC module
+  // Update NELENMAC acordingly!
+  typedef enum logic [1:0] {
+    VecMacElen16  = 2'h0,
+    VecMacElen32  = 2'h1,
+    VecMacElen64  = 2'h2
+  } elen_mac_e;
+
+  function automatic elen_mac_e parse_raw_mac_elen(logic [1:0] elen_raw);
+    elen_mac_e elen;
+    unique case (elen_raw)
+      2'b00:   elen = VecMacElen16;
+      2'b01:   elen = VecMacElen32;
+      default: elen = VecMacElen64;
     endcase
     return elen;
   endfunction
@@ -506,7 +530,7 @@ package otbn_pkg;
     logic                    mac_en;
     logic                    mac_is_vec;
     mac_mul_type_e           mac_mul_type;
-    logic [NELEN-1:0]        mac_vec_elen_onehot;
+    logic [NELENMAC-1:0]     mac_vec_elen_onehot;
     logic [3:0]              mac_lane_index;
 
     logic                    rf_we;
@@ -559,9 +583,10 @@ package otbn_pkg;
 
   typedef struct packed {
     logic                op_en;
-    logic [NELEN-1:0]    vec_elen_onehot;
+    logic [NELENMAC-1:0] vec_elen_onehot;
     logic [NVecProc-1:0] vec_adder_carry_sel;
     logic [3:0]          vec_sub_carry_sel;
+    logic [2:0]          vec_mul_elen_ctrl;
     logic                is_mod;
     logic                is_vec;
     mac_mul_type_e       mul_type;
@@ -608,17 +633,17 @@ package otbn_pkg;
   } alu_bignum_operation_t;
 
   typedef struct packed {
-    logic [WLEN-1:0]  operand_a;
-    logic [WLEN-1:0]  operand_b;
-    logic [1:0]       operand_a_qw_sel;
-    logic [1:0]       operand_b_qw_sel;
-    logic             wr_hw_sel_upper;
-    logic [1:0]       pre_acc_shift_imm;
-    logic             zero_acc;
-    logic             shift_acc;
-    mac_mul_type_e    mul_type;
-    logic [NELEN-1:0] vec_elen_onehot;
-    logic [3:0]       lane_index;
+    logic [WLEN-1:0]     operand_a;
+    logic [WLEN-1:0]     operand_b;
+    logic [1:0]          operand_a_qw_sel;
+    logic [1:0]          operand_b_qw_sel;
+    logic                wr_hw_sel_upper;
+    logic [1:0]          pre_acc_shift_imm;
+    logic                zero_acc;
+    logic                shift_acc;
+    mac_mul_type_e       mul_type;
+    logic [NELENMAC-1:0] vec_elen_onehot;
+    logic [3:0]          lane_index;
   } mac_bignum_operation_t;
 
   // Encoding generated with:
