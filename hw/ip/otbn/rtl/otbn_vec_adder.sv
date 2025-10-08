@@ -54,8 +54,7 @@ module otbn_vec_adder
   output logic [VLEN-1:0]     sum_o,
   output logic [NVecProc-1:0] carries_out_o
 );
-  logic [NVecProc-1:0][VChunkLEN+1:0] adders_res;
-  logic [NVecProc-1:0]                adders_carry_out;
+  logic [NVecProc-1:0] adders_carry_out /* verilator split_var */;
 
   for (genvar i_adder = 0; i_adder < NVecProc; i_adder++) begin : g_adders
     logic [VChunkLEN-1:0] op_a;
@@ -64,6 +63,7 @@ module otbn_vec_adder
     logic [VChunkLEN:0]   adder_op_b;
     logic                 prev_carry_out;
     logic                 carry_in;
+    logic [VChunkLEN+1:0] result;
 
     // Select the carry in depending on the ELEN. Take previous stage or external carry
     assign prev_carry_out = i_adder == 0 ? carries_in_i[0] : adders_carry_out[i_adder - 1];
@@ -78,17 +78,17 @@ module otbn_vec_adder
     assign adder_op_a = {op_a, 1'b1};
     assign adder_op_b = {op_b, carry_in};
 
-    assign adders_res[i_adder] = adder_op_a + adder_op_b;
-    assign adders_carry_out[i_adder] = adders_res[i_adder][VChunkLEN+1];
+    assign result = adder_op_a + adder_op_b;
+    assign adders_carry_out[i_adder] = result[VChunkLEN+1];
+
+    // assign the result and carries in the same "always_comb" statement
+    // to remove verilator UNOPTFLAT warning
+    assign sum_o[i_adder*VChunkLEN+:VChunkLEN] = result[VChunkLEN:1];
+    assign carries_out_o[i_adder] = result[VChunkLEN+1];
 
     // The LSB is unused
     logic unused_adder_res_lsb;
-    assign unused_adder_res_lsb = adders_res[i_adder][0];
+    assign unused_adder_res_lsb = result[0];
   end
 
-  // Assign result and carries to outputs
-  for (genvar i_adder = 0; i_adder < NVecProc; i_adder++) begin : g_assign_outputs
-    assign sum_o[i_adder*VChunkLEN+:VChunkLEN] = adders_res[i_adder][VChunkLEN:1];
-    assign carries_out_o[i_adder] = adders_carry_out[i_adder];
-  end
 endmodule
