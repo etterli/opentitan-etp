@@ -232,6 +232,95 @@ bn.trn2.8S  w11, w2, w3
 bn.trn2.4D  w12, w4, w5
 bn.trn2.2Q  w13, w6, w7
 
+/************************
+ * BN.MULV and BN.MULVL *
+ ************************/
+addi x2, x0, 0
+la     x3, vec16a0_bnmulv
+bn.lid x2++, 0(x3)
+la     x3, vec16b0_bnmulv
+bn.lid x2++, 0(x3)
+la     x3, vec32a0_bnmulv
+bn.lid x2++, 0(x3)
+la     x3, vec32b0_bnmulv
+bn.lid x2++, 0(x3)
+
+bn.mulv.16H  w10, w0, w1
+bn.mulv.8S   w11, w2, w3
+bn.mulvl.16H w12, w0, w1, 15
+bn.mulvl.8S  w13, w2, w3, 7
+
+/************
+ * BN.MULVM *
+ ************/
+addi x2, x0, 0
+la     x3, vec16a0_bnmulvm
+bn.lid x2++, 0(x3)
+la     x3, vec16b0_bnmulvm
+bn.lid x2++, 0(x3)
+la     x3, vec32a0_bnmulvm
+bn.lid x2++, 0(x3)
+la     x3, vec32b0_bnmulvm
+bn.lid x2++, 0(x3)
+/* load the modulus into w20 and then into MOD*/
+li           x2, 20
+la           x3, mod16_bnmulvm
+bn.lid       x2, 0(x3)
+bn.wsrw      MOD, w20
+bn.mulvm.16H w10, w0, w1
+li           x2, 20
+la           x3, mod32_bnmulvm
+bn.lid       x2, 0(x3)
+bn.wsrw      MOD, w20
+bn.mulvm.8S  w11, w2, w3
+
+/*************
+ * BN.MULVML *
+ *************/
+addi x2, x0, 0
+li           x2, 0
+la           x3, mod16_bnmulvml
+bn.lid       x2, 0(x3)
+bn.wsrw      MOD, w0
+addi x2, x0, 0
+la     x3, vec16a_bnmulvml
+bn.lid x2++, 0(x3)
+la     x3, vec16b_bnmulvml
+bn.lid x2++, 0(x3)
+bn.mulvml.16H  w2, w0, w1, 0
+bn.mulvml.16H  w3, w0, w1, 1
+bn.mulvml.16H  w4, w0, w1, 2
+bn.mulvml.16H  w5, w0, w1, 3
+bn.mulvml.16H  w6, w0, w1, 4
+bn.mulvml.16H  w7, w0, w1, 5
+bn.mulvml.16H  w8, w0, w1, 6
+bn.mulvml.16H  w9, w0, w1, 7
+bn.mulvml.16H w10, w0, w1, 8
+bn.mulvml.16H w11, w0, w1, 9
+bn.mulvml.16H w12, w0, w1, 10
+bn.mulvml.16H w13, w0, w1, 11
+bn.mulvml.16H w14, w0, w1, 12
+bn.mulvml.16H w15, w0, w1, 13
+bn.mulvml.16H w16, w0, w1, 14
+bn.mulvml.16H w17, w0, w1, 15
+
+addi x2, x0, 0
+la           x3, mod32_bnmulvml
+bn.lid       x2, 0(x3)
+bn.wsrw      MOD, w0
+addi x2, x0, 0
+la     x3, vec32a_bnmulvml
+bn.lid x2++, 0(x3)
+la     x3, vec32b_bnmulvml
+bn.lid x2++, 0(x3)
+bn.mulvml.8S  w18, w0, w1, 0
+bn.mulvml.8S  w19, w0, w1, 1
+bn.mulvml.8S  w20, w0, w1, 2
+bn.mulvml.8S  w21, w0, w1, 3
+bn.mulvml.8S  w22, w0, w1, 4
+bn.mulvml.8S  w23, w0, w1, 5
+bn.mulvml.8S  w24, w0, w1, 6
+bn.mulvml.8S  w25, w0, w1, 7
 ecall
 
 .section .data
@@ -1290,4 +1379,368 @@ vec128b_bntrn2:
   Result of 128bit trn2
   res = n/a
   res = 0x0100a0000300008000010080900006001000000a003000080010000800900006
+*/
+
+/*
+  16bit vector vec16a0 for instruction mulv
+  vec16a0 = [0, 1, 34, 58, 157, 23, 221, 159, 148, 62, 33, 129, 15, 158, 36, 137]
+  vec16a0 = 0x000000010022003a009d001700dd009f0094003e00210081000f009e00240089
+*/
+vec16a0_bnmulv:
+  .word 0x00240089
+  .word 0x000f009e
+  .word 0x00210081
+  .word 0x0094003e
+  .word 0x00dd009f
+  .word 0x009d0017
+  .word 0x0022003a
+  .word 0x00000001
+
+/*
+  16bit vector vec16b0 for instruction mulv
+  vec16b0 = [63206, 58121, 923, 588, 208, 223, 204, 180, 10, 1, 100, 192, 42, 161, 92, 47]
+  vec16b0 = 0xf6e6e309039b024c00d000df00cc00b4000a0001006400c0002a00a1005c002f
+*/
+vec16b0_bnmulv:
+  .word 0x005c002f
+  .word 0x002a00a1
+  .word 0x006400c0
+  .word 0x000a0001
+  .word 0x00cc00b4
+  .word 0x00d000df
+  .word 0x039b024c
+  .word 0xf6e6e309
+
+/*
+  Result of 16bit mulv
+  res = [0, 58121, 31382, 34104, 32656, 5129, 45084, 28620, 1480, 62, 3300, 24768, 630, 25438, 3312, 6439]
+  res = 0x0000e3097a9685387f901409b01c6fcc05c8003e0ce460c00276635e0cf01927
+*/
+
+/*
+  32bit vector vec32a0 for instruction mulv
+  vec32a0 = [0, 1, 44913, 9734, 23276, 65251, 13010, 40903]
+  vec32a0 = 0x00000000000000010000af710000260600005aec0000fee3000032d200009fc7
+*/
+vec32a0_bnmulv:
+  .word 0x00009fc7
+  .word 0x000032d2
+  .word 0x0000fee3
+  .word 0x00005aec
+  .word 0x00002606
+  .word 0x0000af71
+  .word 0x00000001
+  .word 0x00000000
+
+/*
+  32bit vector vec32b0 for instruction mulv
+  vec32b0 = [4140082361, 1869666356, 636760, 207841, 59661, 52504, 947, 30691]
+  vec32b0 = 0xf6c4a4b96f70d8340009b75800032be10000e90d0000cd18000003b3000077e3
+*/
+vec32b0_bnmulv:
+  .word 0x000077e3
+  .word 0x000003b3
+  .word 0x0000cd18
+  .word 0x0000e90d
+  .word 0x00032be1
+  .word 0x0009b758
+  .word 0x6f70d834
+  .word 0xf6c4a4b9
+
+/*
+  Result of 32bit mulv
+  res = [0, 1869666356, 2828998104, 2023124294, 1388669436, 3425938504, 12320470, 1255353973]
+  res = 0x000000006f70d834a89f15d878966d4652c569fccc33ac4800bbfed64ad32e75
+*/
+
+/*
+  16bit vector mod16 for instruction mulvm. Combined [R, q]
+  mod16 = [16801, 7583]
+  mod16 = 0x000000000000000000000000000000000000000000000000000041a100001d9f
+*/
+mod16_bnmulvm:
+  .word 0x00001d9f
+  .word 0x000041a1
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+
+/*
+  16bit vector vec16a0 for instruction mulvm
+  vec16a0 = [74, 4067, 3784, 5909, 314, 6006, 839, 3194, 6718, 3314, 6912, 734, 4636, 5106, 4760, 6536]
+  vec16a0 = 0x004a0fe30ec81715013a177603470c7a1a3e0cf21b0002de121c13f212981988
+*/
+vec16a0_bnmulvm:
+  .word 0x12981988
+  .word 0x121c13f2
+  .word 0x1b0002de
+  .word 0x1a3e0cf2
+  .word 0x03470c7a
+  .word 0x013a1776
+  .word 0x0ec81715
+  .word 0x004a0fe3
+
+/*
+  16bit vector vec16b0 for instruction mulvm
+  vec16b0 = [3603, 1967, 4388, 2100, 909, 457, 6860, 7308, 3102, 6214, 4357, 7324, 5348, 5501, 1850, 4385]
+  vec16b0 = 0x0e1307af11240834038d01c91acc1c8c0c1e184611051c9c14e4157d073a1121
+*/
+vec16b0_bnmulvm:
+  .word 0x073a1121
+  .word 0x14e4157d
+  .word 0x11051c9c
+  .word 0x0c1e1846
+  .word 0x1acc1c8c
+  .word 0x038d01c9
+  .word 0x11240834
+  .word 0x0e1307af
+
+/*
+  Result of 16bit mulvm
+  res = [7535, 1849, 731, 6077, 4868, 498, 179, 4791, 2503, 6051, 7302, 6607, 6745, 5980, 6427, 3741]
+  res = 0x1d6f073902db17bd130401f200b312b709c717a31c8619cf1a59175c191b0e9d
+*/
+
+/*
+  32bit vector mod32 for instruction mulvm. Combined [R, q]
+  mod32 = [4236238847, 8380417]
+  mod32 = 0x000000000000000000000000000000000000000000000000fc7fdfff007fe001
+*/
+mod32_bnmulvm:
+  .word 0x007fe001
+  .word 0xfc7fdfff
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+
+/*
+  32bit vector vec32a0 for instruction mulvm
+  vec32a0 = [140140, 2179652, 4415585, 3591344, 6089560, 5367875, 2289882, 4817594]
+  vec32a0 = 0x0002236c00214244004360610036ccb0005ceb580051e8430022f0da004982ba
+*/
+vec32a0_bnmulvm:
+  .word 0x004982ba
+  .word 0x0022f0da
+  .word 0x0051e843
+  .word 0x005ceb58
+  .word 0x0036ccb0
+  .word 0x00436061
+  .word 0x00214244
+  .word 0x0002236c
+
+/*
+  32bit vector vec32b0 for instruction mulvm
+  vec32b0 = [7268407, 3661137, 7621524, 6778366, 6274350, 2059156, 3886783, 2027657]
+  vec32b0 = 0x006ee8370037dd5100744b9400676dfe005fbd2e001f6b94003b4ebf001ef089
+*/
+vec32b0_bnmulvm:
+  .word 0x001ef089
+  .word 0x003b4ebf
+  .word 0x001f6b94
+  .word 0x005fbd2e
+  .word 0x00676dfe
+  .word 0x00744b94
+  .word 0x0037dd51
+  .word 0x006ee837
+
+/*
+  Result of 32bit mulvm
+  res = [1620927, 7309254, 1234587, 1342470, 3140778, 8169851, 1752570, 480708]
+  res = 0x0018bbbf006f87c60012d69b00147c06002fecaa007ca97b001abdfa000755c4
+*/
+
+/*
+  16bit vector mod16 for instruction mulvml. Combined [R, q]
+  mod16 = [16801, 7583]
+  mod16 = 0x000000000000000000000000000000000000000000000000000041a100001d9f
+*/
+mod16_bnmulvml:
+  .word 0x00001d9f
+  .word 0x000041a1
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+
+/*
+  16bit vector vec16a for instruction mulvlm
+  vec16a = [3112, 1175, 5700, 1065, 2288, 2734, 4377, 3511, 2799, 3372, 6575, 5433, 1061, 6708, 4622, 631]
+  vec16a = 0x0c2804971644042908f00aae11190db70aef0d2c19af153904251a34120e0277
+*/
+vec16a_bnmulvml:
+  .word 0x120e0277
+  .word 0x04251a34
+  .word 0x19af1539
+  .word 0x0aef0d2c
+  .word 0x11190db7
+  .word 0x08f00aae
+  .word 0x16440429
+  .word 0x0c280497
+
+/*
+  16bit vector vec16b for instruction mulvlm
+  vec16b = [5896, 2974, 3532, 7345, 4227, 6159, 6439, 5196, 7398, 4938, 3163, 1023, 6077, 3487, 184, 3476]
+  vec16b = 0x17080b9e0dcc1cb11083180f1927144c1ce6134a0c5b03ff17bd0d9f00b80d94
+*/
+vec16b_bnmulvml:
+  .word 0x00b80d94
+  .word 0x17bd0d9f
+  .word 0x0c5b03ff
+  .word 0x1ce6134a
+  .word 0x1927144c
+  .word 0x1083180f
+  .word 0x0dcc1cb1
+  .word 0x17080b9e
+
+/*
+  Result of 16bit mulvlm index 0
+  res = [4997, 471, 5673, 1040, 6364, 1851, 2245, 4105, 6685, 1584, 4249, 2849, 5059, 1424, 633, 1079]
+  res = 0x138501d71629041018dc073b08c510091a1d063010990b2113c3059002790437
+
+  Result of 16bit mulvlm index 1
+  res = [3467, 5025, 3241, 6652, 5590, 6852, 3714, 4528, 31, 6515, 6499, 6294, 1472, 4325, 2503, 5764]
+  res = 0x0d8b13a10ca919fc15d61ac40e8211b0001f19731963189605c010e509c71684
+
+  Result of 16bit mulvlm index 2
+  res = [3597, 4192, 5331, 3251, 7440, 777, 3044, 4046, 299, 1685, 63, 2978, 5147, 5268, 659, 4226]
+  res = 0x0e0d106014d30cb31d1003090be40fce012b0695003f0ba2141b149402931082
+
+  Result of 16bit mulvlm index 3
+  res = [719, 1, 3393, 614, 899, 2274, 5044, 1184, 7082, 4785, 1619, 3709, 3118, 1774, 3334, 6893]
+  res = 0x02cf00010d410266038308e213b404a01baa12b106530e7d0c2e06ee0d061aed
+
+  Result of 16bit mulvlm index 4
+  res = [6294, 4818, 6109, 882, 1489, 6280, 6060, 2096, 5159, 1810, 5018, 4414, 601, 1091, 2418, 4517]
+  res = 0x189612d217dd037205d1188817ac083014270712139a113e02590443097211a5
+
+  Result of 16bit mulvlm index 5
+  res = [6229, 1443, 5064, 6374, 564, 5526, 6395, 2337, 5025, 4225, 653, 6072, 2555, 4411, 3340, 5286]
+  res = 0x185505a313c818e60234159618fb092113a11081028d17b809fb113b0d0c14a6
+
+  Result of 16bit mulvlm index 6
+  res = [2295, 752, 3648, 6748, 1161, 3873, 1588, 3157, 2398, 3978, 4208, 6207, 1589, 7023, 4778, 4347]
+  res = 0x08f702f00e401a5c04890f2106340c55095e0f8a1070183f06351b6f12aa10fb
+
+  Result of 16bit mulvlm index 7
+  res = [5622, 841, 2305, 730, 5342, 1518, 3107, 2371, 3307, 5195, 4222, 2656, 6103, 5666, 5767, 3601]
+  res = 0x15f60349090102da14de05ee0c2309430ceb144b107e0a6017d7162216870e11
+
+  Result of 16bit mulvlm index 8
+  res = [480, 3924, 5967, 5525, 1581, 5568, 1026, 5220, 5656, 832, 5985, 2339, 3653, 7565, 1941, 7154]
+  res = 0x01e00f54174f1595062d15c00402146416180340176109230e451d8d07951bf2
+
+  Result of 16bit mulvlm index 9
+  res = [1523, 7332, 5236, 5129, 1841, 5534, 317, 6136, 4423, 4662, 3113, 1750, 6014, 2123, 4879, 6364]
+  res = 0x05f31ca4147414090731159e013d17f8114712360c2906d6177e084b130f18dc
+
+  Result of 16bit mulvlm index 10
+  res = [6138, 4301, 3601, 1930, 6852, 5987, 6864, 4191, 6354, 23, 2125, 5360, 3774, 1476, 81, 4846]
+  res = 0x17fa10cd0e11078a1ac417631ad0105f18d20017084d14f00ebe05c4005112ee
+
+  Result of 16bit mulvlm index 11
+  res = [3858, 828, 3694, 331, 1238, 2288, 5782, 2145, 2237, 3654, 5924, 7520, 3484, 5353, 340, 4988]
+  res = 0x0f12033c0e6e014b04d608f01696086108bd0e4617241d600d9c14e90154137c
+
+  Result of 16bit mulvlm index 12
+  res = [2027, 836, 506, 5243, 847, 5314, 636, 4034, 5812, 4019, 3710, 6860, 5679, 4379, 4263, 7051]
+  res = 0x07eb034401fa147b034f14c2027c0fc216b40fb30e7e1acc162f111b10a71b8b
+
+  Result of 16bit mulvlm index 13
+  res = [4074, 5627, 6000, 4713, 812, 3277, 7002, 4494, 1749, 5545, 2930, 2127, 5507, 3070, 76, 7449]
+  res = 0x0fea15fb17701269032c0ccd1b5a118e06d515a90b72084f15830bfe004c1d19
+
+  Result of 16bit mulvlm index 14
+  res = [2709, 2999, 6804, 6300, 4136, 2609, 6454, 1972, 6518, 3179, 2261, 6613, 1043, 4543, 4272, 849]
+  res = 0x0a950bb71a94189c10280a31193607b419760c6b08d519d5041311bf10b00351
+
+  Result of 16bit mulvlm index 15
+  res = [317, 127, 6263, 2148, 428, 644, 3616, 6291, 4620, 1055, 872, 897, 1670, 5391, 6353, 3366]
+  res = 0x013d007f1877086401ac02840e201893120c041f036803810686150f18d10d26
+*/
+
+/*
+  32bit vector mod32 for instruction mulvml. Combined [R, q]
+  mod32 = [4236238847, 8380417]
+  mod32 = 0x000000000000000000000000000000000000000000000000fc7fdfff007fe001
+*/
+mod32_bnmulvml:
+  .word 0x007fe001
+  .word 0xfc7fdfff
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+  .word 0x00000000
+
+/*
+  32bit vector vec32a for instruction mulvlm
+  vec32a = [4386494, 351607, 6259716, 5199533, 2908764, 4819738, 3847752, 1371499]
+  vec32a = 0x0042eebe00055d77005f8404004f56ad002c625c00498b1a003ab6480014ed6b
+*/
+vec32a_bnmulvml:
+  .word 0x0014ed6b
+  .word 0x003ab648
+  .word 0x00498b1a
+  .word 0x002c625c
+  .word 0x004f56ad
+  .word 0x005f8404
+  .word 0x00055d77
+  .word 0x0042eebe
+
+/*
+  32bit vector vec32b for instruction mulvlm
+  vec32b = [5579227, 5963489, 3458491, 7380290, 3431077, 8342412, 2134462, 7944091]
+  vec32b = 0x005521db005afee10034c5bb00709d4200345aa5007f4b8c002091be0079379b
+*/
+vec32b_bnmulvml:
+  .word 0x0079379b
+  .word 0x002091be
+  .word 0x007f4b8c
+  .word 0x00345aa5
+  .word 0x00709d42
+  .word 0x0034c5bb
+  .word 0x005afee1
+  .word 0x005521db
+
+/*
+  Result of 32bit mulvlm index 0
+  res = [515442, 718185, 5498530, 8237924, 2044754, 1726077, 6572625, 3330118]
+  res = 0x0007dd72000af5690053e6a2007db364001f3352001a567d00644a510032d046
+
+  Result of 32bit mulvlm index 1
+  res = [5419054, 1425467, 3766569, 6818953, 4725646, 2800241, 4192112, 6140848]
+  res = 0x0052b02e0015c03b0039792900680c8900481b8e002aba71003ff770005db3b0
+
+  Result of 32bit mulvlm index 2
+  res = [3018797, 4432770, 8337926, 4779507, 5619268, 5774263, 722707, 754865]
+  res = 0x002e102d0043a382007f3a060048edf30055be4400581bb7000b0713000b84b1
+
+  Result of 32bit mulvlm index 3
+  res = [7198082, 4470350, 1294493, 652760, 6695655, 6942087, 1374687, 3415932]
+  res = 0x006dd5820044364e0013c09d0009f5d800662ae70069ed870014f9df00341f7c
+
+  Result of 32bit mulvlm index 4
+  res = [4028494, 3561434, 1255813, 1531198, 1806146, 7587267, 4810729, 2052119]
+  res = 0x003d784e003657da0013298500175d3e001b8f420073c5c3004967e9001f5017
+
+  Result of 32bit mulvlm index 5
+  res = [3946449, 1256339, 5192417, 7420002, 7942467, 4331764, 4009735, 7997143]
+  res = 0x003c37d100132b93004f3ae10071386200793143004218f4003d2f07007a06d7
+
+  Result of 32bit mulvlm index 6
+  res = [7645843, 696628, 2618429, 6339788, 59635, 120462, 2282714, 5805869]
+  res = 0x0074aa93000aa1340027f43d0060bccc0000e8f30001d68e0022d4da0058972d
+
+  Result of 32bit mulvlm index 7
+  res = [1268083, 1404023, 6310330, 5756485, 6378028, 3750173, 8235518, 7687323]
+  res = 0x0013597300156c77006049ba0057d6450061522c0039391d007da9fe00754c9b
 */
