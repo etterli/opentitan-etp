@@ -86,7 +86,7 @@ module otbn_predecode
   // length. Each bit controls one vector chunk. Is generated from the parsed vector ELEN.
   logic [NVecProc-1:0] alu_bignum_vec_adder_carry_sel;
   logic [NVecProc-1:0] mac_bignum_vec_adder_carry_sel;
-  logic [2:0]          mac_bignum_vec_mul_elen_ctrl;
+  logic [1:0]          mac_bignum_vec_mul_elen_ctrl;
 
   // Mod output selector control signals
   logic alu_bignum_vec_mod_selector_en;
@@ -670,32 +670,24 @@ module otbn_predecode
     // The subtractor is 64b and is only used for the modulo case.
     // TODO: assert that ELEN is only 16b, 32b or 256b depending on mulv type
     unique case (mac_bignum_vec_elen)
-      VecMacElen16: begin
-        // Modulo reduction for 16b elements:
-        // - Adder: We operate on four 32b elements in parallel
-        //   16 carry sel bits because we have a 256b adder
-        // - Subtractor: We operate on four 16b elements in parallel
-        mac_bignum_vec_adder_carry_sel = {8{2'b01}};
-        mac_bignum_vec_mul_elen_ctrl   = 3'b001;
-      end
       VecMacElen32: begin
         // Modulo reduction for 32b elements:
         // - Adder: We operate on two 64b elements in parallel
         //   16 carry sel bits because we have a 256b adder
         // - Subtractor: We operate on two 32b elements in parallel
         mac_bignum_vec_adder_carry_sel = {4{4'b0001}};
-        mac_bignum_vec_mul_elen_ctrl   = 3'b011;
+        mac_bignum_vec_mul_elen_ctrl   = 2'b01;
       end
       VecMacElen64: begin
         // Regular 64b multiplication with ACC accumulation
         // - Adder: We operate on 256b values
         // - Subtractor: Unused
         mac_bignum_vec_adder_carry_sel = 16'd1;
-        mac_bignum_vec_mul_elen_ctrl   = 3'b111;
+        mac_bignum_vec_mul_elen_ctrl   = 2'b11;
       end
       default: begin // TODO: Throw error -> Use assert
         mac_bignum_vec_adder_carry_sel = '1;
-        mac_bignum_vec_mul_elen_ctrl   = 3'b000;
+        mac_bignum_vec_mul_elen_ctrl   = 2'b00;
       end
     endcase
 

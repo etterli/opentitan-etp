@@ -6,12 +6,7 @@
 /*
   Load the vectors into w0-w7
 */
-addi x2, x0, 0
-
-la     x3, vec16a0
-bn.lid x2++, 0(x3)
-la     x3, vec16b0
-bn.lid x2++, 0(x3)
+addi x2, x0, 2
 
 la     x3, vec32a0
 bn.lid x2++, 0(x3)
@@ -33,7 +28,6 @@ bn.lid x2++, 0(x3)
 la     x3, vec128b1
 bn.lid x2++, 0(x3)
 
-bn.mulv.16H w10, w0, w1
 bn.mulv.8S  w11, w2, w3
 bn.mulv.4D  w12, w4, w5
 bn.mulv.2Q  w13, w6, w7
@@ -46,42 +40,6 @@ addi x3, x0, 0 /* reset x3*/
 ecall
 
 .section .data
-/*
-  16bit vector vec16a0 for instruction mulv
-  vec16a0 = [0, 1, 34, 58, 157, 23, 221, 159, 148, 62, 33, 129, 15, 158, 36, 137]
-  vec16a0 = 0x000000010022003a009d001700dd009f0094003e00210081000f009e00240089
-*/
-vec16a0:
-  .word 0x00240089
-  .word 0x000f009e
-  .word 0x00210081
-  .word 0x0094003e
-  .word 0x00dd009f
-  .word 0x009d0017
-  .word 0x0022003a
-  .word 0x00000001
-
-/*
-  16bit vector vec16b0 for instruction mulv
-  vec16b0 = [63206, 58121, 923, 588, 208, 223, 204, 180, 10, 1, 100, 192, 42, 161, 92, 47]
-  vec16b0 = 0xf6e6e309039b024c00d000df00cc00b4000a0001006400c0002a00a1005c002f
-*/
-vec16b0:
-  .word 0x005c002f
-  .word 0x002a00a1
-  .word 0x006400c0
-  .word 0x000a0001
-  .word 0x00cc00b4
-  .word 0x00d000df
-  .word 0x039b024c
-  .word 0xf6e6e309
-
-/*
-  Result of 16bit mulv
-  res = [0, 58121, 31382, 34104, 32656, 5129, 45084, 28620, 1480, 62, 3300, 24768, 630, 25438, 3312, 6439]
-  res = 0x0000e3097a9685387f901409b01c6fcc05c8003e0ce460c00276635e0cf01927
-*/
-
 /*
   32bit vector vec32a0 for instruction mulv
   vec32a0 = [0, 1, 44913, 9734, 23276, 65251, 13010, 40903]
