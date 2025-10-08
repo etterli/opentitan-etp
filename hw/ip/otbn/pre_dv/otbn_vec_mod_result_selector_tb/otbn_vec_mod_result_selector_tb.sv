@@ -31,6 +31,7 @@ module otbn_vec_mod_result_selector_tb
   logic [NVecProc-1:0] carries_y;
   logic                is_subtraction;
   elen_bignum_e        elen;
+  logic [NELEN-1:0]    elen_onehot;
 
   // Signals from the dut
   logic [VLEN-1:0]     result;
@@ -41,14 +42,14 @@ module otbn_vec_mod_result_selector_tb
   ///////////////
   // The tested module must be named "dut" (see run.tcl)
   otbn_vec_mod_result_selector dut (
-    .result_x_i       (result_x),
-    .carries_x_i      (carries_x),
-    .result_y_i       (result_y),
-    .carries_y_i      (carries_y),
-    .is_subtraction_i (is_subtraction),
-    .elen_i           (elen),
-    .result_o         (result),
-    .adder_y_used_o   (adder_y_used)
+    .result_x_i      (result_x),
+    .carries_x_i     (carries_x),
+    .result_y_i      (result_y),
+    .carries_y_i     (carries_y),
+    .is_subtraction_i(is_subtraction),
+    .elen_onehot_i   (elen_onehot),
+    .result_o        (result),
+    .adder_y_used_o  (adder_y_used)
   );
 
   ///////////////
@@ -66,6 +67,14 @@ module otbn_vec_mod_result_selector_tb
              exp_response_queue[$];
 
   integer n_errs, n_checks, all_stim_applied;
+
+  prim_onehot_enc #(
+    .OneHotWidth (NELEN)
+  ) u_elen_onehot (
+    .in_i (elen),
+    .en_i ('1), // always enable
+    .out_o(elen_onehot)
+  );
 
   initial begin : application_block
     response_t gold_response;

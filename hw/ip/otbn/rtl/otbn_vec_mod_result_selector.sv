@@ -59,7 +59,6 @@
  *               |                              |                                       |
  *         res[255:240]                   res[239:224]                             res[15:0]
  *
- * TODO: Blanking is required for the ELEN dependent MUXs controlling the res_seli value.
  */
 
 module otbn_vec_mod_result_selector
@@ -70,8 +69,7 @@ module otbn_vec_mod_result_selector
   input  logic [VLEN-1:0]     result_y_i,
   input  logic [NVecProc-1:0] carries_y_i,
   input  logic                is_subtraction_i,
-  input  elen_bignum_e        elen_i,
-
+  input  logic [NELEN-1:0]    elen_onehot_i,
   output logic [VLEN-1:0]     result_o,
   output logic                adder_y_used_o
 );
@@ -93,36 +91,41 @@ module otbn_vec_mod_result_selector
   /////////////////////
   // Selection stage //
   /////////////////////
-  // TODO: MUX control signals must be blankable? Check this
-  // TODO: What and how to blank?
+  // Compute the res_sel signal for each ELEN and then assign it using a onehot MUX
+  // A onehot MUX is required for SCA blanking.
+  logic [NVecProc-1:0] res_sel_all [NELEN];
   logic [NVecProc-1:0] res_sel;
 
-  // TODO: Make dynamic depending on VLEN, NVecProc, VChunkLEN
-  always_comb begin
-    unique case (elen_i)
-      VecElen16: begin // res_sel0 = D0, res_sel1 = D1, ...
-        res_sel = decision;
-      end
-      VecElen32: begin // res_sel{0,1} = D1, res_sel{2,3} = D3, ...
-        for (int i_chunk = 0; i_chunk < NVecProc; i_chunk+=2) begin : g_selection_32b
-          res_sel[i_chunk+:2] = {2{decision[i_chunk+1]}};
-        end
-      end
-      VecElen64: begin // res_sel{0,1,2,3} = D3, res_sel{4,5,6,7} = D7, ...
-        for (int i_chunk = 0; i_chunk < NVecProc; i_chunk+=4) begin : g_selection_32b
-          res_sel[i_chunk+:4] = {4{decision[i_chunk+3]}};
-        end
-      end
-      VecElen128: begin // res_sel{0 .. 7} = D7, res_sel{8 .. 15} = D15
-        res_sel[0+:8] = {8{decision[7]}};
-        res_sel[8+:8] = {8{decision[15]}};
-      end
-      VecElen256: begin
-        res_sel = {16{decision[15]}};
-      end
-      default: res_sel = '0; // TODO: throw error with assertion
-    endcase
+  // ELEN = 16b
+  assign res_sel_all[VecElen16] = decision;
+
+  // ELEN = 32b
+  for (genvar i_chunk = 0; i_chunk < NVecProc; i_chunk+=2) begin : g_selection_32b
+    assign res_sel_all[VecElen32][i_chunk+:2] = {2{decision[i_chunk+1]}};
   end
+
+  // ELEN = 64b
+  for (genvar i_chunk = 0; i_chunk < NVecProc; i_chunk+=4) begin : g_selection_64b
+    assign res_sel_all[VecElen64][i_chunk+:4] = {4{decision[i_chunk+3]}};
+  end
+
+  // ELEN = 128b
+  assign res_sel_all[VecElen128][0+:8] = {8{decision[7]}};
+  assign res_sel_all[VecElen128][8+:8] = {8{decision[15]}};
+
+  // ELEN = 256b
+  assign res_sel_all[VecElen256] = {16{decision[15]}};
+
+  prim_onehot_mux #(
+    .Width(NVecProc),
+    .Inputs(NELEN)
+  ) u_vec_mod_sel_elen_mux (
+    .clk_i (),
+    .rst_ni(),
+    .in_i  (res_sel_all),
+    .sel_i (elen_onehot_i),
+    .out_o (res_sel)
+  );
 
   for (genvar i_res = 0; i_res < NVecProc; i_res++) begin : g_assign_results
     assign result_o[i_res*VChunkLEN+:VChunkLEN] =
