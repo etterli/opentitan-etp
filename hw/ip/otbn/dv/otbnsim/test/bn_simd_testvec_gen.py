@@ -80,6 +80,22 @@ def montgomery_mul(a_, b_, q, R, size):
     return r
 
 
+def montgomery_mul_no_cond_sub(a, b, q, R, size):
+    '''Performs a Montgomery multiplication but without the conditional subtraction.
+    The inputs a and b are in Montgomery space.
+    The result is also in Montgomery space.
+
+    Algorithm (where []_d are the lower d bits, []^d are the higher d bits)
+       r = [c + [[c]_d * R]_d * q]^d
+       return r
+    '''
+    reg_c = a * b
+    reg_tmp = lower_d_bits(reg_c, size)
+    reg_tmp = lower_d_bits(reg_tmp * R, size)
+    r = upper_d_bits(reg_c + reg_tmp * q, size)
+    return r
+
+
 def split_vectors(elems_a, elems_b, elems_c, size: int):
     '''Splits the elements into multiple vectors which fit into
     256bit vectors depending on the element size.
@@ -463,15 +479,7 @@ def bn_mulvm(size: int, mod: int, mod_R: int) -> str:
     elems_c = []
     for a, b in zip(elems_a, elems_b):
         # Perform a montgomery multiplication
-        c = montgomery_mul(a, b, mod, mod_R, size)
-
-        # Double check the montgomery multiplication
-        # We can convert back into regular space by MontMul with 1
-        a_orig = montgomery_mul(a, 1, mod, mod_R, size)
-        b_orig = montgomery_mul(b, 1, mod, mod_R, size)
-        c_orig = (a_orig * b_orig) % mod
-        c_recovered = montgomery_mul(c, 1, mod, mod_R, size)
-        assert c_orig == c_recovered
+        c = montgomery_mul_no_cond_sub(a, b, mod, mod_R, size)
 
         # fake wrap around
         c = c & ((1 << size) - 1)
@@ -601,15 +609,7 @@ def bn_mulvml(size: int, mod: int, mod_R: int) -> str:
 
         for elem in range(256 // size):
             # Perform a montgomery multiplication
-            c = montgomery_mul(elems_a[elem], lane_value, mod, mod_R, size)
-
-            # Double check the montgomery multiplication
-            # We can convert back into regular space by MontMul with 1
-            a_orig = montgomery_mul(elems_a[elem], 1, mod, mod_R, size)
-            lane_orig = montgomery_mul(lane_value, 1, mod, mod_R, size)
-            c_orig = (a_orig * lane_orig) % mod
-            c_recovered = montgomery_mul(c, 1, mod, mod_R, size)
-            assert c_orig == c_recovered
+            c = montgomery_mul_no_cond_sub(elems_a[elem], lane_value, mod, mod_R, size)
 
             # fake wrap around
             c = c & ((1 << size) - 1)

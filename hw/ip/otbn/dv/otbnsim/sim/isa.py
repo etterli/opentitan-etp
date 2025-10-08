@@ -225,6 +225,24 @@ def montgomery_mul(a, b, q, R, size):
     return r
 
 
+def montgomery_mul_no_cond_subtraction(a, b, q, R, size):
+    '''Performs a Montgomery multiplication but without the final conditional subtraction.
+    The inputs a and b are in Montgomery space.
+    The result is also in Montgomery space.
+
+    Algorithm (where []_d are the lower d bits, []^d are the higher d bits)
+       r = [c + [[c]_d * R]_d * q]^d
+       return r
+    '''
+    reg_c = a * b
+    reg_tmp = lower_d_bits(reg_c, size)
+    reg_tmp = lower_d_bits(reg_tmp * R, size)
+    r = upper_d_bits(reg_c + reg_tmp * q, size)
+    # if r >= q:
+    #     r -= q
+    return r
+
+
 def to_2s_complement_sized(value: int, size: int) -> int:
     '''Interpret the signed value as a 2's complement of unsigned-`size` integer'''
     assert (size % 8) == 0
