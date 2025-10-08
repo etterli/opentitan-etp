@@ -19,6 +19,7 @@ Inputs:
 
 Expected output:
 - `result` == `result_x`
+- `adder_y_used = 1` it is always used
 
 ### 002: addvm - Modulo reduction - X overflow
 This testcase should cover the following questions:
@@ -33,6 +34,7 @@ Inputs:
 
 Expected output:
 - `result` == `result_y`
+- `adder_y_used = 1` it is always used
 
 ### 003: addvm - Modulo reduction - Y overflow
 This testcase should cover the following questions:
@@ -47,6 +49,7 @@ Inputs:
 
 Expected output:
 - `result` == `result_y`
+- `adder_y_used = 1` it is always used
 
 ### 004: addvm - Modulo reduction - X and Y overflow
 This testcase should cover the following questions:
@@ -61,6 +64,7 @@ Inputs:
 
 Expected output:
 - `result` == `result_y`
+- `adder_y_used = 1` it is always used
 
 ### 005: addvm - Mixed reduction
 This testcase should cover the following questions:
@@ -75,6 +79,7 @@ Inputs:
 
 Expected output:
 - `result` matches the expected carry decision
+- `adder_y_used = 1` it is always used
 
 
 ### 010: subvm - No modulo reduction - Y low
@@ -90,6 +95,7 @@ Inputs:
 
 Expected output:
 - `result` == `result_x`
+- `adder_y_used = 0`
 
 ### 011: subvm - No modulo reduction - Y high
 This testcase should cover the following questions:
@@ -104,6 +110,7 @@ Inputs:
 
 Expected output:
 - `result` == `result_x`
+- `adder_y_used = 0`
 
 ### 012: subvm - Modulo reduction - Y low
 This testcase should cover the following questions:
@@ -118,6 +125,7 @@ Inputs:
 
 Expected output:
 - `result` == `result_y`
+- `adder_y_used = 1`
 
 ### 013: subvm - Modulo reduction - Y high
 This testcase should cover the following questions:
@@ -132,6 +140,7 @@ Inputs:
 
 Expected output:
 - `result` == `result_y`
+- `adder_y_used = 1`
 
 todo below-----
 ### 014: subvm - Mixed reduction
@@ -147,12 +156,13 @@ Inputs:
 
 Expected output:
 - `result` matches the expected carry decision
+- `adder_y_used = 1` if any calculation requires reduction
 
 ## Golden Vector file
 All testcases inputs and outputs are defined in the `otbn_vec_mod_result_selector.golden` file.
 Each line of the file has the following format and represents a testcase.
 ```
-<elen>, 0x<result_x>, 0x<carries_x>, 0x<result_y>, 0x<carries_y>, <is_subtraction>, 0x<result>
+<elen>, 0x<result_x>, 0x<carries_x>, 0x<result_y>, 0x<carries_y>, <is_subtraction>, 0x<result>, <adder_y_used>
 ```
 where
 - `<elen>`: one of `16, 32, 64, 128, 256`
@@ -162,3 +172,4 @@ where
 - `<carries_y>`: input carries of `result_y` as `16'hxxxx` (0x is expected)
 - `<is_subtraction>`: `0` for addvm, `1` for subvm
 - `<result>`: the expected result as `256'hxx...` (0x is expected)
+- `<adder_y_used>`: `1` or `0`

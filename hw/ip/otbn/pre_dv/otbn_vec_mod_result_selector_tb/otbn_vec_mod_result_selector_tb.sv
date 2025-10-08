@@ -34,6 +34,7 @@ module otbn_vec_mod_result_selector_tb
 
   // Signals from the dut
   logic [VLEN-1:0]     result;
+  logic                adder_y_used;
 
   ///////////////
   // DUT       //
@@ -46,7 +47,8 @@ module otbn_vec_mod_result_selector_tb
     .carries_y_i      (carries_y),
     .is_subtraction_i (is_subtraction),
     .elen_i           (elen),
-    .result_o         (result)
+    .result_o         (result),
+    .adder_y_used_o   (adder_y_used)
   );
 
   ///////////////
@@ -56,6 +58,7 @@ module otbn_vec_mod_result_selector_tb
   // packed result to pass to queue
   typedef struct packed {
     logic [VLEN-1:0] result;
+    logic adder_y_used;
   } response_t;
 
   // Response queues to pass results to checker
@@ -82,9 +85,9 @@ module otbn_vec_mod_result_selector_tb
       @(posedge clk);
       #(APPL_DELAY);
       // Set inputs
-      ret_code = $fscanf(stim_fd, "%d, 0x%h, 0x%h, 0x%h, 0x%h, %d, 0x%h\n",
+      ret_code = $fscanf(stim_fd, "%d, 0x%h, 0x%h, 0x%h, 0x%h, %d, 0x%h, %d\n",
                          elen_size, result_x, carries_x, result_y, carries_y,
-                         is_subtraction, gold_response.result);
+                         is_subtraction, gold_response.result, gold_response.adder_y_used);
       if (ret_code == 0) begin
         $error("Could not parse line of golden vector. Error %d", ret_code);
         $fatal("Abort due to corrupted golden vector.");
@@ -105,7 +108,8 @@ module otbn_vec_mod_result_selector_tb
       //          "carry x 0x%h, ", carries_x,
       //          "carry y 0x%h, ", carries_y,
       //          "sub %d, ", is_subtraction,
-      //          "res 0x%h", result);
+      //          "res 0x%h", gold_response.result,
+      //          "y used %d", gold_response.adder_y_used);
 
       // Publish the expected values
       exp_response_queue.push_back(gold_response);
@@ -123,6 +127,7 @@ module otbn_vec_mod_result_selector_tb
       #(ACQ_DELAY);
       // Capture output
       response.result = result;
+      response.adder_y_used = adder_y_used;
       acq_response_queue.push_back(response);
     end
   end
@@ -143,8 +148,8 @@ module otbn_vec_mod_result_selector_tb
         if (acq_resp !== exp_resp) begin
             n_errs = n_errs + 1;
             $display("Mismatch occurred at %dns, check %d!\n ", $time, n_checks,
-                    "Acquired (result): %x\n ", acq_resp.result,
-                    "Expected (result): %x\n ", exp_resp.result);
+                    "Acquired (result, adder y used): %x, %d\n ", acq_resp.result, acq_resp.adder_y_used,
+                    "Expected (result, adder y used): %x, %d\n ", exp_resp.result, exp_resp.adder_y_used);
         end
       end
     end
