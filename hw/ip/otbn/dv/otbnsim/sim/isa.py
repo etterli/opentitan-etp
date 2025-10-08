@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import sys
-from typing import Dict, Iterator, Optional, Tuple
+from typing import Dict, Iterator, Optional
 
 from shared.insn_yaml import Insn, DummyInsn, load_insns_yaml
 
@@ -219,7 +219,7 @@ def extract_sub_word_signed(value: int, size: int, index: int) -> int:
 
 
 def extract_simd_element_size(datatype: int) -> int:
-    '''Extract the bit size of a SIMD element from the given datatype encoding.   
+    '''Extract the bit size of a SIMD element from the given datatype encoding.
     The SIMD instructions operate on different element sizes.
     The bitwidth is defined as:
     Encoded Value | size name | size in bits

@@ -14,7 +14,7 @@ from .isa import (OTBNInsn, RV32RegReg, RV32RegImm,
                   # extract_sub_word_signed,
                   logical_bit_shift,
                   # from_2s_complement_sized,
-                  to_2s_complement_sized
+                  # to_2s_complement_sized
                   )
 from .state import OTBNState
 
