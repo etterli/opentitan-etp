@@ -62,7 +62,7 @@ mod16:
   .word 0x00000000
 
 /*
-  16bit vector vec16a0 for instruction mulvm
+  16bit vector vec16a0 for instruction mulvm without conditional subtraction
   vec16a0 = [74, 4067, 3784, 5909, 314, 6006, 839, 3194, 6718, 3314, 6912, 734, 4636, 5106, 4760, 6536]
   vec16a0 = 0x004a0fe30ec81715013a177603470c7a1a3e0cf21b0002de121c13f212981988
 */
@@ -77,7 +77,7 @@ vec16a0:
   .word 0x004a0fe3
 
 /*
-  16bit vector vec16b0 for instruction mulvm
+  16bit vector vec16b0 for instruction mulvm without conditional subtraction
   vec16b0 = [3603, 1967, 4388, 2100, 909, 457, 6860, 7308, 3102, 6214, 4357, 7324, 5348, 5501, 1850, 4385]
   vec16b0 = 0x0e1307af11240834038d01c91acc1c8c0c1e184611051c9c14e4157d073a1121
 */
@@ -92,9 +92,9 @@ vec16b0:
   .word 0x0e1307af
 
 /*
-  Result of 16bit mulvm
+  Result of 16bit mulvm without conditional subtraction
   res = [7535, 1849, 731, 6077, 4868, 498, 179, 4791, 2503, 6051, 7302, 6607, 6745, 5980, 6427, 3741]
-  res = 0x1d6f073902db17bd130401f200b312b709c717a31c8619cf1a59175c191b0e9d
+  res = 0x009003b214c2181a1199066d0ffc0eac04a208611c860a621a6f093110f81e78
 */
 
 /*
