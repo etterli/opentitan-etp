@@ -86,7 +86,6 @@ module otbn_predecode
   // length. Each bit controls one vector chunk. Is generated from the parsed vector ELEN.
   logic [NVecProc-1:0] alu_bignum_vec_adder_carry_sel;
   logic [NVecProc-1:0] mac_bignum_vec_adder_carry_sel;
-  logic [3:0]          mac_bignum_vec_sub_carry_sel;
   logic [2:0]          mac_bignum_vec_mul_elen_ctrl;
 
   // Mod output selector control signals
@@ -677,7 +676,6 @@ module otbn_predecode
         //   16 carry sel bits because we have a 256b adder
         // - Subtractor: We operate on four 16b elements in parallel
         mac_bignum_vec_adder_carry_sel = {8{2'b01}};
-        mac_bignum_vec_sub_carry_sel   = {4{1'b1}};
         mac_bignum_vec_mul_elen_ctrl   = 3'b001;
       end
       VecMacElen32: begin
@@ -686,7 +684,6 @@ module otbn_predecode
         //   16 carry sel bits because we have a 256b adder
         // - Subtractor: We operate on two 32b elements in parallel
         mac_bignum_vec_adder_carry_sel = {4{4'b0001}};
-        mac_bignum_vec_sub_carry_sel   = {2{2'b01}};
         mac_bignum_vec_mul_elen_ctrl   = 3'b011;
       end
       VecMacElen64: begin
@@ -694,12 +691,10 @@ module otbn_predecode
         // - Adder: We operate on 256b values
         // - Subtractor: Unused
         mac_bignum_vec_adder_carry_sel = 16'd1;
-        mac_bignum_vec_sub_carry_sel   = '1;
         mac_bignum_vec_mul_elen_ctrl   = 3'b111;
       end
       default: begin // TODO: Throw error -> Use assert
         mac_bignum_vec_adder_carry_sel = '1;
-        mac_bignum_vec_sub_carry_sel   = '1;
         mac_bignum_vec_mul_elen_ctrl   = 3'b000;
       end
     endcase
@@ -781,7 +776,6 @@ module otbn_predecode
   assign mac_predec_bignum_o.op_en               = mac_bignum_op_en;
   assign mac_predec_bignum_o.vec_elen_onehot     = mac_bignum_vec_elen_onehot;
   assign mac_predec_bignum_o.vec_adder_carry_sel = mac_bignum_vec_adder_carry_sel;
-  assign mac_predec_bignum_o.vec_sub_carry_sel   = mac_bignum_vec_sub_carry_sel;
   assign mac_predec_bignum_o.vec_mul_elen_ctrl   = mac_bignum_vec_mul_elen_ctrl;
   assign mac_predec_bignum_o.is_mod              = mac_bignum_is_mod;
   assign mac_predec_bignum_o.is_vec              = mac_bignum_is_vec;

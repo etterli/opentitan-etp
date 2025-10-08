@@ -585,7 +585,6 @@ package otbn_pkg;
     logic                op_en;
     logic [NELENMAC-1:0] vec_elen_onehot;
     logic [NVecProc-1:0] vec_adder_carry_sel;
-    logic [3:0]          vec_sub_carry_sel;
     logic [2:0]          vec_mul_elen_ctrl;
     logic                is_mod;
     logic                is_vec;
