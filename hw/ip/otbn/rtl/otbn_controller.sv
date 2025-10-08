@@ -997,7 +997,7 @@ module otbn_controller
 
   assign alu_bignum_operation_o.operand_a = rf_bignum_rd_data_a_no_intg;
 
-  // Base ALU Operand B MUX
+  // Bignum ALU Operand B MUX
   always_comb begin
     unique case (insn_dec_bignum_i.alu_op_b_sel)
       OpBSelRegister:  alu_bignum_operation_o.operand_b = rf_bignum_rd_data_b_no_intg;
@@ -1006,13 +1006,16 @@ module otbn_controller
     endcase
   end
 
-  assign alu_bignum_operation_o.op          = insn_dec_bignum_i.alu_op;
-  assign alu_bignum_operation_o.shift_right = insn_dec_bignum_i.alu_shift_right;
-  assign alu_bignum_operation_o.shift_amt   = insn_dec_bignum_i.alu_shift_amt;
-  assign alu_bignum_operation_o.flag_group  = insn_dec_bignum_i.alu_flag_group;
-  assign alu_bignum_operation_o.sel_flag    = insn_dec_bignum_i.alu_sel_flag;
-  assign alu_bignum_operation_o.alu_flag_en = insn_dec_bignum_i.alu_flag_en & insn_valid_i;
-  assign alu_bignum_operation_o.mac_flag_en = insn_dec_bignum_i.mac_flag_en & insn_valid_i;
+  assign alu_bignum_operation_o.op                  = insn_dec_bignum_i.alu_op;
+  assign alu_bignum_operation_o.shift_right         = insn_dec_bignum_i.alu_shift_right;
+  assign alu_bignum_operation_o.shift_amt           = insn_dec_bignum_i.alu_shift_amt;
+  assign alu_bignum_operation_o.vec_elen_onehot     = insn_dec_bignum_i.alu_vec_elen_onehot;
+  assign alu_bignum_operation_o.vec_adder_carry_sel = insn_dec_bignum_i.alu_vec_adder_carry_sel;
+  assign alu_bignum_operation_o.vec_shifter_mask    = insn_dec_bignum_i.alu_vec_shifter_mask;
+  assign alu_bignum_operation_o.flag_group          = insn_dec_bignum_i.alu_flag_group;
+  assign alu_bignum_operation_o.sel_flag            = insn_dec_bignum_i.alu_sel_flag;
+  assign alu_bignum_operation_o.alu_flag_en         = insn_dec_bignum_i.alu_flag_en & insn_valid_i;
+  assign alu_bignum_operation_o.mac_flag_en         = insn_dec_bignum_i.mac_flag_en & insn_valid_i;
 
   assign alu_bignum_operation_valid_o  = insn_valid_i;
   assign alu_bignum_operation_commit_o = insn_executing;

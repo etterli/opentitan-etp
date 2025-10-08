@@ -52,7 +52,6 @@ module otbn_decoder
   // Register and immediate selection //
   //////////////////////////////////////
   imm_b_sel_base_e   imm_b_mux_sel_base; // immediate selection for operand b in base ISA
-  shamt_sel_bignum_e shift_amt_mux_sel_bignum; // shift amount selection in bignum ISA
 
   // Immediates from RV32I encoding
   logic [31:0] imm_i_type_base;
@@ -113,9 +112,45 @@ module otbn_decoder
   logic [$clog2(WLEN)-1:0] shift_amt_a_type_bignum;
   // Shift amount for BN.RSHI
   logic [$clog2(WLEN)-1:0] shift_amt_s_type_bignum;
+  // Shift amount for BN.SHV
+  logic [$clog2(WLEN)-1:0] shift_amt_shv_bignum;
 
   assign shift_amt_a_type_bignum = {insn[29:25], 3'b0};
   assign shift_amt_s_type_bignum = {insn[31:25], insn[14]};
+  assign shift_amt_shv_bignum    = {1'b0, insn[26:25], insn[19:15]}; // convert 7b to 8b
+
+  // Bignum vectorized instruction options
+  logic alu_is_modulo_bignum_vec;
+  logic alu_is_trn1_bignum_vec;
+  logic alu_is_subtraction_bignum_vec;
+
+  assign alu_is_modulo_bignum_vec      =  insn[27];
+  assign alu_is_trn1_bignum_vec        = ~insn[30];
+  assign alu_is_subtraction_bignum_vec =  insn[30];
+
+  // The ISA forsees only 4 types of vector element lengths (16, 32, 64 and 128 bits). However,
+  // some regular and vectorized instructions share the hardware and thus we need a 256b type
+  // to signal "regular" 256b operation. We thus first extract the ELEN from the instruction and
+  // then depending on the instruction convert it correctly.
+  logic [1:0]       alu_elen_raw_bignum_vec;
+  elen_bignum_e     alu_elen_bignum_vec; // The parsed vector element length incl. the 256b option
+  logic [NELEN-1:0] alu_elen_onehot_bignum_vec;
+
+  assign alu_elen_raw_bignum_vec = insn[29:28];
+  prim_onehot_enc #(
+    .OneHotWidth (NELEN)
+  ) u_alu_elen_bignum_vec_enc (
+    .in_i (alu_elen_bignum_vec),
+    .en_i ('1), // always enable
+    .out_o(alu_elen_onehot_bignum_vec)
+  );
+
+  // Control signal for the vectorized adder to propagate the carry bits depending on the element
+  // length. Each bit controls one vector chunk. Is generated from the parsed vector ELEN.
+  logic [NVecProc-1:0] alu_adder_carry_sel_bignum_vec;
+
+  // Mask for the vectorized shifter. Must be predecoded to have a stable shifting.
+  logic [WLEN-1:0] alu_shifter_mask_bignum_vec;
 
   logic alu_shift_right_bignum;
 
@@ -189,15 +224,14 @@ module otbn_decoder
     endcase
   end
 
+  // Prior to the vectorized BN instructions the shift amount was selected
+  // with a simple mux and the mux control signal was set in the decoder
+  // case statement. However, the vectorized shifter depends on the shift_amt value
+  // and calculates the shift mask at the end of the decoder case structure.
+  // As the alu_shift_amt_bignum was assigned outside of the decoder always_comb block
+  // this lead to UNOPTFLAT verilator warnings. This warning is resolved by setting the
+  // shift_amt always in the decoder case statement.
   logic [$clog2(WLEN)-1:0] alu_shift_amt_bignum;
-  always_comb begin
-    unique case (shift_amt_mux_sel_bignum)
-      ShamtSelBignumA:    alu_shift_amt_bignum = shift_amt_a_type_bignum;
-      ShamtSelBignumS:    alu_shift_amt_bignum = shift_amt_s_type_bignum;
-      ShamtSelBignumZero: alu_shift_amt_bignum = '0;
-      default:            alu_shift_amt_bignum = shift_amt_a_type_bignum;
-    endcase
-  end
 
   assign insn_valid_o   = insn_fetch_resp_valid_i & ~illegal_insn;
   assign insn_illegal_o = insn_fetch_resp_valid_i & illegal_insn;
@@ -220,37 +254,40 @@ module otbn_decoder
   };
 
   assign insn_dec_bignum_o = '{
-    a:                   insn_rs1,
-    b:                   insn_rs2,
-    d:                   insn_rd,
-    i:                   imm_i_type_bignum,
-    rf_a_indirect:       rf_a_indirect_bignum,
-    rf_b_indirect:       rf_b_indirect_bignum,
-    rf_d_indirect:       rf_d_indirect_bignum,
-    d_inc:               d_inc_bignum,
-    a_inc:               a_inc_bignum,
-    a_wlen_word_inc:     a_wlen_word_inc_bignum,
-    b_inc:               b_inc_bignum,
-    alu_shift_amt:       alu_shift_amt_bignum,
-    alu_shift_right:     alu_shift_right_bignum,
-    alu_flag_group:      alu_flag_group_bignum,
-    alu_sel_flag:        alu_sel_flag_bignum,
-    alu_flag_en:         alu_flag_en_bignum,
-    mac_flag_en:         mac_flag_en_bignum,
-    alu_op:              alu_operator_bignum,
-    alu_op_b_sel:        alu_op_b_mux_sel_bignum,
-    mac_op_a_qw_sel:     mac_op_a_qw_sel_bignum,
-    mac_op_b_qw_sel:     mac_op_b_qw_sel_bignum,
-    mac_wr_hw_sel_upper: mac_wr_hw_sel_upper_bignum,
-    mac_pre_acc_shift:   mac_pre_acc_shift_bignum,
-    mac_zero_acc:        mac_zero_acc_bignum,
-    mac_shift_out:       mac_shift_out_bignum,
-    mac_en:              mac_en_bignum,
-    rf_we:               rf_we_bignum,
-    rf_wdata_sel:        rf_wdata_sel_bignum,
-    rf_ren_a:            rf_ren_a_bignum,
-    rf_ren_b:            rf_ren_b_bignum,
-    sel_insn:            sel_insn_bignum
+    a:                       insn_rs1,
+    b:                       insn_rs2,
+    d:                       insn_rd,
+    i:                       imm_i_type_bignum,
+    rf_a_indirect:           rf_a_indirect_bignum,
+    rf_b_indirect:           rf_b_indirect_bignum,
+    rf_d_indirect:           rf_d_indirect_bignum,
+    d_inc:                   d_inc_bignum,
+    a_inc:                   a_inc_bignum,
+    a_wlen_word_inc:         a_wlen_word_inc_bignum,
+    b_inc:                   b_inc_bignum,
+    alu_shift_amt:           alu_shift_amt_bignum,
+    alu_shift_right:         alu_shift_right_bignum,
+    alu_flag_group:          alu_flag_group_bignum,
+    alu_sel_flag:            alu_sel_flag_bignum,
+    alu_flag_en:             alu_flag_en_bignum,
+    mac_flag_en:             mac_flag_en_bignum,
+    alu_op:                  alu_operator_bignum,
+    alu_op_b_sel:            alu_op_b_mux_sel_bignum,
+    alu_vec_elen_onehot:     alu_elen_onehot_bignum_vec,
+    alu_vec_adder_carry_sel: alu_adder_carry_sel_bignum_vec,
+    alu_vec_shifter_mask:    alu_shifter_mask_bignum_vec,
+    mac_op_a_qw_sel:         mac_op_a_qw_sel_bignum,
+    mac_op_b_qw_sel:         mac_op_b_qw_sel_bignum,
+    mac_wr_hw_sel_upper:     mac_wr_hw_sel_upper_bignum,
+    mac_pre_acc_shift:       mac_pre_acc_shift_bignum,
+    mac_zero_acc:            mac_zero_acc_bignum,
+    mac_shift_out:           mac_shift_out_bignum,
+    mac_en:                  mac_en_bignum,
+    rf_we:                   rf_we_bignum,
+    rf_wdata_sel:            rf_wdata_sel_bignum,
+    rf_ren_a:                rf_ren_a_bignum,
+    rf_ren_b:                rf_ren_b_bignum,
+    sel_insn:                sel_insn_bignum
   };
 
   assign insn_dec_shared_o = '{
@@ -509,6 +546,44 @@ module otbn_decoder
         endcase
       end
 
+      ////////////////////////////////
+      // Bignum ALU vectorized insn //
+      ////////////////////////////////
+      InsnOpcodeBignumVec: begin
+        // Some instructions of this opcode are handled in the Bignum MAC.
+        // 3'b011 is BN.MULV/BN.MULVL
+        // 3'b100 is BN.MULVM/BN.MULVML
+        unique case (insn[14:12])
+          3'b000:  begin
+            // BN.ADDV/BN.ADDVM/BN.SUBV/BN.SUBVM (also forseen for BN.ADDVC/BN.SUBVC)
+            insn_subset     = InsnSubsetBignum;
+            rf_ren_a_bignum = 1'b1;
+            rf_we_bignum    = 1'b1;
+            rf_ren_b_bignum = 1'b1;
+          end
+          3'b101: begin
+            // BN.TRN1/BN.TRN2
+            insn_subset     = InsnSubsetBignum;
+            rf_ren_a_bignum = 1'b1;
+            rf_we_bignum    = 1'b1;
+            rf_ren_b_bignum = 1'b1;
+          end
+          3'b111: begin
+            //BN.SHV
+            insn_subset     = InsnSubsetBignum;
+            rf_ren_b_bignum = 1'b1;
+            rf_we_bignum    = 1'b1;
+          end
+          // unused / illegal instructions
+          3'b001, // foreseen for BN.ADDVI/BN.SUBVI
+          3'b010, // reserved for future use
+          3'b110: illegal_insn = 1'b1; // reserved for future use
+          default: ;
+            // 3'b011 is BN.MULV/BN.MULVL
+            // 3'b100 is BN.MULVM/BN.MULVML
+        endcase
+      end
+
       ///////////////////////////////////////
       // Bignum logical/BN.RSHI/LOOP/LOOPI //
       ///////////////////////////////////////
@@ -698,12 +773,15 @@ module otbn_decoder
     alu_operator_bignum      = AluOpBignumNone;
     alu_op_b_mux_sel_bignum  = OpBSelImmediate;
 
-    shift_amt_mux_sel_bignum = ShamtSelBignumA;
+    alu_shift_amt_bignum = shift_amt_a_type_bignum;
 
     opcode_alu               = insn_opcode_e'(insn_alu[6:0]);
 
     alu_flag_en_bignum       = 1'b0;
     mac_flag_en_bignum       = 1'b0;
+
+    // Default is 256b ELEN
+    alu_elen_bignum_vec      = VecElen256;
 
     unique case (opcode_alu)
       //////////////
@@ -849,11 +927,54 @@ module otbn_decoder
 
         if (insn_alu[14:12] != 3'b100) begin
           alu_op_b_mux_sel_bignum  = OpBSelRegister;
-          shift_amt_mux_sel_bignum = ShamtSelBignumA;
+          alu_shift_amt_bignum = shift_amt_a_type_bignum;
         end else begin
-          alu_op_b_mux_sel_bignum  = OpBSelImmediate;
-          shift_amt_mux_sel_bignum = ShamtSelBignumZero;
+          alu_op_b_mux_sel_bignum = OpBSelImmediate;
+          alu_shift_amt_bignum    = '0;
         end
+      end
+
+      ////////////////////////////////
+      // Bignum ALU vectorized insn //
+      ////////////////////////////////
+
+      InsnOpcodeBignumVec: begin
+        // Some instructions of this opcode are handled in the Bignum MAC.
+        // 3'b011 is BN.MULV/BN.MULVL
+        // 3'b100 is BN.MULVM/BN.MULVML
+        unique case (insn_alu[14:12])
+          3'b000: begin
+            // BN.ADDV/BN.ADDVM/BN.SUBV/BN.SUBVM (also forseen for BN.ADDVC/BN.SUBVC)
+            alu_elen_bignum_vec     = parse_raw_elen(alu_elen_raw_bignum_vec);
+            alu_shift_amt_bignum    = '0;
+            alu_op_b_mux_sel_bignum = OpBSelRegister;
+
+            unique case ({alu_is_subtraction_bignum_vec, alu_is_modulo_bignum_vec})
+              2'b00: alu_operator_bignum = AluOpBignumAddv;
+              2'b01: alu_operator_bignum = AluOpBignumAddvm;
+              2'b10: alu_operator_bignum = AluOpBignumSubv;
+              2'b11: alu_operator_bignum = AluOpBignumSubvm;
+            endcase
+          end
+          3'b101: begin
+            // BN.TRN1/BN.TRN2
+            alu_elen_bignum_vec      = parse_raw_elen(alu_elen_raw_bignum_vec);
+            alu_shift_amt_bignum     = '0;
+            alu_op_b_mux_sel_bignum  = OpBSelRegister;
+            alu_operator_bignum      = alu_is_trn1_bignum_vec ? AluOpBignumTrn1 : AluOpBignumTrn2;
+          end
+          3'b111: begin
+            // BN.SHV
+            alu_elen_bignum_vec     = parse_raw_elen(alu_elen_raw_bignum_vec);
+            alu_shift_amt_bignum    = shift_amt_shv_bignum;
+            alu_operator_bignum     = AluOpBignumShv;
+            alu_op_b_mux_sel_bignum = OpBSelRegister;
+          end
+          default: ;
+            // 3'b001 forseen for BN.ADDVI/BN.SUBVI
+            // 3'b010 reserved for future use
+            // 3'b110 reserved for future use
+        endcase
       end
 
       ///////////////////////////////////////
@@ -867,29 +988,29 @@ module otbn_decoder
 
         unique case (insn_alu[14:12])
           3'b010: begin
-            shift_amt_mux_sel_bignum = ShamtSelBignumA;
-            alu_operator_bignum      = AluOpBignumAnd;
-            alu_flag_en_bignum       = 1'b1;
+            alu_shift_amt_bignum = shift_amt_a_type_bignum;
+            alu_operator_bignum  = AluOpBignumAnd;
+            alu_flag_en_bignum   = 1'b1;
           end
           3'b100: begin
-            shift_amt_mux_sel_bignum = ShamtSelBignumA;
-            alu_operator_bignum      = AluOpBignumOr;
-            alu_flag_en_bignum       = 1'b1;
+            alu_shift_amt_bignum = shift_amt_a_type_bignum;
+            alu_operator_bignum  = AluOpBignumOr;
+            alu_flag_en_bignum   = 1'b1;
           end
           3'b101: begin
-            shift_amt_mux_sel_bignum = ShamtSelBignumA;
-            alu_operator_bignum      = AluOpBignumNot;
-            alu_flag_en_bignum       = 1'b1;
+            alu_shift_amt_bignum = shift_amt_a_type_bignum;
+            alu_operator_bignum  = AluOpBignumNot;
+            alu_flag_en_bignum   = 1'b1;
           end
           3'b110: begin
-            shift_amt_mux_sel_bignum = ShamtSelBignumA;
-            alu_operator_bignum      = AluOpBignumXor;
-            alu_flag_en_bignum       = 1'b1;
+            alu_shift_amt_bignum = shift_amt_a_type_bignum;
+            alu_operator_bignum  = AluOpBignumXor;
+            alu_flag_en_bignum   = 1'b1;
           end
           3'b011,
           3'b111: begin
-            shift_amt_mux_sel_bignum = ShamtSelBignumS;
-            alu_operator_bignum      = AluOpBignumRshi;
+            alu_shift_amt_bignum = shift_amt_s_type_bignum;
+            alu_operator_bignum  = AluOpBignumRshi;
           end
           default: ;
         endcase
@@ -904,13 +1025,13 @@ module otbn_decoder
           3'b001: begin  // BN.CMP
             alu_operator_bignum      = AluOpBignumSub;
             alu_op_b_mux_sel_bignum  = OpBSelRegister;
-            shift_amt_mux_sel_bignum = ShamtSelBignumA;
+            alu_shift_amt_bignum     = shift_amt_a_type_bignum;
             alu_flag_en_bignum       = 1'b1;
           end
           3'b011: begin  // BN.CMPB
             alu_operator_bignum      = AluOpBignumSubb;
             alu_op_b_mux_sel_bignum  = OpBSelRegister;
-            shift_amt_mux_sel_bignum = ShamtSelBignumA;
+            alu_shift_amt_bignum     = shift_amt_a_type_bignum;
             alu_flag_en_bignum       = 1'b1;
           end
           3'b100,
@@ -938,6 +1059,44 @@ module otbn_decoder
       default: ;
     endcase
 
+    // Generate control signals depending on the finally selected ELEN for BN ALU
+    //
+    // Vectorized adder:
+    //   Define the carry handling MUX controls depending on ELEN. A bit for each MUX.
+    //   If set: Select carry from previous stage. Else use the external carry.
+    //   The adder 0 always takes the external carry.
+    // Vectorized shifter
+    //   Shift mask depending on the shift_amt and ELEN
+    unique case (alu_elen_bignum_vec) // TODO: Make dynamic depending on VLEN, NVecProc, VChunkLEN
+      VecElen16: begin
+        alu_adder_carry_sel_bignum_vec = {16{1'b1}};
+        // we need a 16b mask. The -1 in the () term defaults to value of at least 32b.
+        // Thus we need to specify the width explicitly
+        alu_shifter_mask_bignum_vec    = { 16{(( 16'd1 << ( 16-alu_shift_amt_bignum)) -  16'd1)}};
+      end
+      VecElen32: begin
+        alu_adder_carry_sel_bignum_vec = {8{2'b01}};
+        // for >=32b the -1 in the () term expands to the correct bit width.
+        // Nonetheless specify it for clarity
+        alu_shifter_mask_bignum_vec    = {  8{(( 32'd1 << ( 32-alu_shift_amt_bignum)) -  32'd1)}};
+      end
+      VecElen64: begin
+        alu_adder_carry_sel_bignum_vec = {4{4'b0001}};
+        alu_shifter_mask_bignum_vec    = {  4{(( 64'd1 << ( 64-alu_shift_amt_bignum)) -  64'd1)}};
+      end
+      VecElen128: begin
+        alu_adder_carry_sel_bignum_vec = {2{8'b0000_0001}};
+        alu_shifter_mask_bignum_vec    = {  2{((128'd1 << (128-alu_shift_amt_bignum)) - 128'd1)}};
+      end
+      VecElen256: begin
+        alu_adder_carry_sel_bignum_vec = 16'd1;
+        alu_shifter_mask_bignum_vec    = {256{1'b1}};
+      end
+      default: begin // TODO: Throw error -> Use assert
+        alu_adder_carry_sel_bignum_vec = 16'd0;
+        alu_shifter_mask_bignum_vec    = {256{1'b1}};
+      end
+    endcase
   end
 
   // clk_i and rst_ni are only used by assertions
