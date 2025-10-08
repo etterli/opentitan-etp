@@ -9,26 +9,29 @@
 module otbn_mod_replicator
   import otbn_pkg::*;
 (
-  input  logic [WLEN-1:0] mod_i,
-  input  elen_bignum_e    elen_i,
-
-  output logic [WLEN-1:0] mod_replicated_o
+  input  logic [WLEN-1:0]  mod_i,
+  input  logic [NELEN-1:0] elen_onehot_i,
+  output logic [WLEN-1:0]  mod_replicated_o
 );
   logic [WLEN-1:0] mod; // from MOD WSR
-  logic [WLEN-1:0] mod_rep;
+  logic [WLEN-1:0] mod_rep [NELEN];
 
   assign mod = mod_i;
 
-  always_comb begin
-    unique case(elen_i)
-    VecElen16:  mod_rep = {16{mod[ 15:0]}};
-    VecElen32:  mod_rep = { 8{mod[ 31:0]}};
-    VecElen64:  mod_rep = { 4{mod[ 63:0]}};
-    VecElen128: mod_rep = { 2{mod[127:0]}};
-    default: mod_rep = mod;
-    endcase
-  end
+  assign mod_rep[VecElen16]  = {16{mod[ 15:0]}};
+  assign mod_rep[VecElen32]  = { 8{mod[ 31:0]}};
+  assign mod_rep[VecElen64]  = { 4{mod[ 63:0]}};
+  assign mod_rep[VecElen128] = { 2{mod[127:0]}};
+  assign mod_rep[VecElen256] = mod;
 
-assign mod_replicated_o = mod_rep;
-
+  prim_onehot_mux #(
+    .Width(WLEN),
+    .Inputs(NELEN)
+  ) u_vec_mod_sel_elen_mux (
+    .clk_i (),
+    .rst_ni(),
+    .in_i  (mod_rep),
+    .sel_i (elen_onehot_i),
+    .out_o (mod_replicated_o)
+  );
 endmodule
