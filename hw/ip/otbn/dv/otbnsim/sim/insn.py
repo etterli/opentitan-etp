@@ -1426,12 +1426,13 @@ class BNMULV(OTBNInsn):
         self.wrs1 = op_vals['wrs1']
         self.wrs2 = op_vals['wrs2']
 
-    def execute(self, state: OTBNState) -> None:
+    def execute(self, state: OTBNState) -> Optional[Iterator[None]]:
         vec_a = state.wdrs.get_reg(self.wrs1).read_unsigned()
         vec_b = state.wdrs.get_reg(self.wrs2).read_unsigned()
         size = extract_simd_element_size(self.datatype)
 
-        # TODO: match HW implementation regarding cycles
+        # This instruction operates over 4 cycles. In each cycle 64b of the 256b vector are
+        # processed. We first compute the results and then emulate the register usage.
         result = 0
         for elem in range(256 // size - 1, -1, -1):
             elem_a = extract_sub_word(vec_a, size, elem)
@@ -1443,6 +1444,22 @@ class BNMULV(OTBNInsn):
             result = (result << size) | elem_c
 
         result = result & ((1 << 256) - 1)
+
+        # Emulate the register usage
+        qword_mask = (1 << 64) - 1
+        # cycle 1: ACC is not read (all zero) and lowest quarter word is written
+        acc = 0
+        acc |= result & qword_mask
+        acc = state.wsrs.ACC.write_unsigned(acc)
+        for cycle in range(1, 4):
+            yield None
+            # cycle 2, 3 and 4: ACC is read and current quarter word is merged
+            acc = state.wsrs.ACC.read_unsigned()
+            current_qword_mask = (((1 << 256) - 1) & (qword_mask << (cycle * 64)))
+            acc = acc & ~current_qword_mask  # delete the to be replaced qw
+            acc |= result & current_qword_mask
+            acc = state.wsrs.ACC.write_unsigned(acc)
+
         state.wdrs.get_reg(self.wrd).write_unsigned(result)
 
 
@@ -1457,12 +1474,13 @@ class BNMULVL(OTBNInsn):
         self.wrs2 = op_vals['wrs2']
         self.lane = op_vals['lane']
 
-    def execute(self, state: OTBNState) -> None:
+    def execute(self, state: OTBNState) -> Optional[Iterator[None]]:
         vec_a = state.wdrs.get_reg(self.wrs1).read_unsigned()
         vec_b = state.wdrs.get_reg(self.wrs2).read_unsigned()
         size = extract_simd_element_size(self.datatype)
 
-        # TODO: match HW implementation regarding cycles
+        # This instruction operates over 4 cycles. In each cycle 64b of the 256b vector are
+        # processed. We first compute the results and then emulate the register usage.
         result = 0
         lane_elem = extract_sub_word(vec_b, size, self.lane)
         for elem in range(256 // size - 1, -1, -1):
@@ -1474,6 +1492,22 @@ class BNMULVL(OTBNInsn):
             result = (result << size) | elem_c
 
         result = result & ((1 << 256) - 1)
+
+        # Emulate the register usage
+        qword_mask = (1 << 64) - 1
+        # cycle 1: ACC is not read (all zero) and lowest quarter word is written
+        acc = 0
+        acc |= result & qword_mask
+        acc = state.wsrs.ACC.write_unsigned(acc)
+        for cycle in range(1, 4):
+            yield None
+            # cycle 2, 3 and 4: ACC is read and current quarter word is merged
+            acc = state.wsrs.ACC.read_unsigned()
+            current_qword_mask = (((1 << 256) - 1) & (qword_mask << (cycle * 64)))
+            acc = acc & ~current_qword_mask  # delete the to be replaced qw
+            acc |= result & current_qword_mask
+            acc = state.wsrs.ACC.write_unsigned(acc)
+
         state.wdrs.get_reg(self.wrd).write_unsigned(result)
 
 
