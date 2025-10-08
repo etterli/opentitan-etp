@@ -90,24 +90,22 @@ module otbn_vec_multiplier
                     part_prods[1][1], part_prods[0][0]};
 
   logic [63:0] res_c0, res_c1;
-  // We disable the verilator linting for Width in the partial product summation.
-  // As res_c0 is 64b, verilator expects e.g. part_prods[0][0] + .. to be 64b + 64b
-  // However, part_prods is only 32b. The computation still results in a correct
-  // result.
-  /* verilator lint_off WIDTH */
-  assign res_c0 = part_prods[0][0] +
-                  ((part_prods[0][1] + part_prods[1][0]) << RadixPower) +
-                  (part_prods[1][1] << 2*RadixPower);
-  assign res_c1 = part_prods[2][2] +
-                  ((part_prods[2][3] + part_prods[3][2]) << RadixPower) +
-                  (part_prods[3][3] << 2*RadixPower);
+
+  assign res_c0 =   64'(part_prods[0][0]) +
+                  ((64'(part_prods[0][1]) + 64'(part_prods[1][0])) << RadixPower) +
+                   (64'(part_prods[1][1])                          << 2*RadixPower);
+
+  assign res_c1 =   64'(part_prods[2][2]) +
+                  ((64'(part_prods[2][3]) + 64'(part_prods[3][2])) << RadixPower) +
+                   (64'(part_prods[3][3])                          << 2*RadixPower);
+
   assign res_32b = {res_c1, res_c0};
 
-  assign res_64b = res_c0 +
-    ((part_prods[0][2] + part_prods[2][0]) << 2*RadixPower) +
-    ((part_prods[0][3] + part_prods[1][2] + part_prods[2][1] + part_prods[3][0]) << 3*RadixPower) +
-    ((part_prods[1][3] + part_prods[3][1] + res_c1) << 4*RadixPower);
-  /* verilator lint_on WIDTH */
+  assign res_64b = 128'(res_c0) +
+    ((128'(part_prods[0][2]) + 128'(part_prods[2][0]))                << 2*RadixPower) +
+    ((128'(part_prods[0][3]) + 128'(part_prods[1][2]) +
+      128'(part_prods[2][1]) + 128'(part_prods[3][0]))                << 3*RadixPower) +
+    ((128'(part_prods[1][3]) + 128'(part_prods[3][1]) + 128'(res_c1)) << 4*RadixPower);
 
   // Output MUX
   // TODO: Is this clean? Summarize all results into a MUX input.
