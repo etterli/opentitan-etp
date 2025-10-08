@@ -9,14 +9,13 @@ module otbn_vec_shifter
   input  logic [WLEN-1:0]         shifter_in_lower_i,
   input  logic                    shift_right_i,
   input  logic [$clog2(WLEN)-1:0] shift_amt_i,
-  input  elen_bignum_e            elen_i,
-
-  output logic [WLEN-1:0] shifter_res_o
+  input  logic [WLEN-1:0]         vector_mask_i,
+  output logic [WLEN-1:0]         shifter_res_o
 );
   logic [WLEN*2-1:0] shifter_in;
   logic [WLEN*2-1:0] shifter_out;
   logic [WLEN-1:0]   shifter_in_lower_reverse, shifter_out_lower, shifter_out_lower_reverse,
-                     shifter_masked, vector_mask, unused_shifter_out_upper;
+                     shifter_masked, unused_shifter_out_upper;
 
   for (genvar i = 0; i < WLEN; i++) begin : g_shifter_in_lower_reverse
     assign shifter_in_lower_reverse[i] = shifter_in_lower_i[WLEN-i-1];
@@ -28,18 +27,7 @@ module otbn_vec_shifter
   assign shifter_out = shifter_in >> shift_amt_i;
 
   // Mask out overflowing bits of the adjacent vector elements
-  always_comb begin
-    unique case(elen_i)
-    // we need a 16b mask. The -1 in the () term defaults to value of at least 32b. Thus we need to specify the width explicitly
-    VecElen16:  vector_mask = { 16{(( 16'd1 << ( 16-shift_amt_i)) -  16'd1)}};
-    // for >=32b the -1 in the () term expands to the correct bit width. Nonetheless specify it for clarity
-    VecElen32:  vector_mask = {  8{(( 32'd1 << ( 32-shift_amt_i)) -  32'd1)}};
-    VecElen64:  vector_mask = {  4{(( 64'd1 << ( 64-shift_amt_i)) -  64'd1)}};
-    VecElen128: vector_mask = {  2{((128'd1 << (128-shift_amt_i)) - 128'd1)}};
-    default:    vector_mask = {256{1'b1}}; // 256b is never masked
-    endcase
-  end
-  assign shifter_masked = shifter_out[WLEN-1:0] & vector_mask;
+  assign shifter_masked = shifter_out[WLEN-1:0] & vector_mask_i;
 
   // assign shifter_out_lower = (elen_i == VecElen256) ? shifter_out[WLEN-1:0] : shifter_masked;
   assign shifter_out_lower = shifter_masked;
