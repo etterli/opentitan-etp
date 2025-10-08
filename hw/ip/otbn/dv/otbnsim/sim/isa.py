@@ -196,6 +196,35 @@ def extract_sub_word(value: int, size: int, index: int) -> int:
     return (value >> (index * size)) & ((1 << size) - 1)
 
 
+def lower_d_bits(value: int, d: int) -> int:
+    '''Extracts the lower d bits of the value.'''
+    return value & ((1 << d) - 1)
+
+
+def upper_d_bits(value: int, d: int) -> int:
+    '''Extracts the upper d bits of the value and shifts them down by d.'''
+    return (value & (((1 << d) - 1) << d)) >> d
+
+
+def montgomery_mul(a_, b_, q, R, size):
+    '''Performs a Montgomery multiplication. The inputs a_ and b_ are in Montgomery space.
+    The result is also in Montgomery space.
+
+    Algorithm (where []_d are the lower d bits, []^d are the higher d bits)
+       r = [c + [[c]_d * R]_d * q]^d
+       if r >= q then
+           return r - q
+       return r
+    '''
+    reg_c = a_ * b_
+    reg_tmp = lower_d_bits(reg_c, size)
+    reg_tmp = lower_d_bits(reg_tmp * R, size)
+    r = upper_d_bits(reg_c + reg_tmp * q, size)
+    if r >= q:
+        r -= q
+    return r
+
+
 def to_2s_complement_sized(value: int, size: int) -> int:
     '''Interpret the signed value as a 2's complement of unsigned-`size` integer'''
     assert (size % 8) == 0

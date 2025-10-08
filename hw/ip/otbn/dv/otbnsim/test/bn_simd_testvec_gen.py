@@ -1,6 +1,7 @@
 # Copyright lowRISC contributors (OpenTitan project).
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
+import random
 
 '''Tool to generate vectors and results to test the OTBN SIMD instructions.
 
@@ -48,6 +49,35 @@ def logical_bit_shift(value: int, size: int, shift_type: int, shift_bits: int) -
 
     shifted = value << shift_bits if shift_type == 0 else value >> shift_bits
     return shifted & mask
+
+
+def lower_d_bits(value: int, d: int) -> int:
+    '''Extracts the lower d bits of the value.'''
+    return value & ((1 << d) - 1)
+
+
+def upper_d_bits(value: int, d: int) -> int:
+    '''Extracts the upper d bits of the value and shifts them down by d.'''
+    return (value & (((1 << d) - 1) << d)) >> d
+
+
+def montgomery_mul(a_, b_, q, R, size):
+    '''Performs a Montgomery multiplication. The inputs a_ and b_ are in Montgomery space.
+    The result is also in Montgomery space.
+
+    Algorithm (where []_d are the lower d bits, []^d are the higher d bits)
+       r = [c + [[c]_d * R]_d * q]^d
+       if r >= q then
+           return r - q
+       return r
+    '''
+    reg_c = a_ * b_
+    reg_tmp = lower_d_bits(reg_c, size)
+    reg_tmp = lower_d_bits(reg_tmp * R, size)
+    r = upper_d_bits(reg_c + reg_tmp * q, size)
+    if r >= q:
+        r -= q
+    return r
 
 
 def split_vectors(elems_a, elems_b, elems_c, size: int):
@@ -140,6 +170,9 @@ def format_vectors(vecs_a, vecs_b, vecs_c, size, operation):
 ###############################################################################
 # Golden vector generators for BN SIMD instructions
 ###############################################################################
+
+random.seed(5637)
+
 
 def bn_addv(size: int) -> str:
     '''Generates golden vectors to test bn.addv.
@@ -399,14 +432,71 @@ def bn_mulv(size: int, mod: int = -1) -> str:
     return txt_a + txt_b + txt_c
 
 
-def bn_mulvm(size: int, mod: int) -> str:
+def bn_mulvm(size: int, mod: int, mod_R: int) -> str:
     '''Generates vectors to test bn.mulvm
 
     Returns a string containing the required assemlby data section.'''
-    txt_mod = format_otbn_memory(hex(mod)[2:].zfill(64),
-                                 size, [mod], f"mod{size}", "mulvm")
 
-    return txt_mod + bn_mulv(size, mod=mod)
+    # Generate random numbers with are in the range [0,q[ (in Montgomery space)
+    match size:
+        case 128:
+            elems_a = [random.randrange(mod), random.randrange(mod)]  # noqa: E501
+            elems_b = [random.randrange(mod), random.randrange(mod)]  # noqa: E501
+        case 64:
+            elems_a = [random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod)]  # noqa: E501
+            elems_b = [random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod)]  # noqa: E501
+        case 32:
+            elems_a = [random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod)]  # noqa: E501
+            elems_b = [random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod)]  # noqa: E501
+        case 16:
+            elems_a = [random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod)]  # noqa: E501
+            elems_b = [random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod)]  # noqa: E501
+
+    elems_c = []
+    for a, b in zip(elems_a, elems_b):
+        # Perform a montgomery multiplication
+        c = montgomery_mul(a, b, mod, mod_R, size)
+
+        # Double check the montgomery multiplication
+        # We can convert back into regular space by MontMul with 1
+        a_orig = montgomery_mul(a, 1, mod, mod_R, size)
+        b_orig = montgomery_mul(b, 1, mod, mod_R, size)
+        c_orig = (a_orig * b_orig) % mod
+        c_recovered = montgomery_mul(c, 1, mod, mod_R, size)
+        assert c_orig == c_recovered
+
+        # fake wrap around
+        c = c & ((1 << size) - 1)
+
+        elems_c.append(c)
+
+    # we have space for only 256//size elements per vector
+    vecs_a, vecs_b, vecs_c = split_vectors(elems_a, elems_b, elems_c, size)
+
+    operation = "mulvm"
+
+    txt_a, txt_b, txt_c = format_vectors(vecs_a, vecs_b, vecs_c, size, operation)
+
+    # Combine modulus and Montgomery R constant into the MOD WSR
+    # For  16b: q @ [15:0], R @ [47:32]
+    # For  32b: q @ [31:0], R @ [63:32]
+    # For  64b: q @ [63:0], R @ [127:64]
+    # For 128b: q @ [127:0], R @ [255:128]
+    offset = 32 if (size == 16 or size == 32) else size
+    mod_WSR = ((mod_R & ((1 << size) - 1)) << offset) | (mod & ((1 << size) - 1))
+
+    txt_mod = format_otbn_memory(hex(mod_WSR)[2:].zfill(64),
+                                 size, [mod_R, mod], f"mod{size}", "mulvm. Combined [R, q]")
+
+    return txt_mod + txt_a + txt_b + txt_c
 
 
 def bn_mulvl(size: int, mod: int = -1) -> str:
@@ -474,13 +564,85 @@ def bn_mulvl(size: int, mod: int = -1) -> str:
     return txt_a + txt_b + txt_lane_res
 
 
-def bn_mulvml(size: int, mod: int) -> str:
+def bn_mulvml(size: int, mod: int, mod_R: int) -> str:
     '''Generates vectors to test bn.mulvm.l
 
     Returns a string containing the required assemlby data section.'''
-    txt_mod = format_otbn_memory(hex(mod)[2:].zfill(64),
-                                 size, [mod], f"mod{size}", "mulvml")
-    return txt_mod + bn_mulvl(size, mod=mod)
+    # Generate random numbers with are in the range [0,q[ (in Montgomery space)
+    match size:
+        case 128:
+            elems_a = [random.randrange(mod), random.randrange(mod)]  # noqa: E501
+            elems_b = [random.randrange(mod), random.randrange(mod)]  # noqa: E501
+        case 64:
+            elems_a = [random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod)]  # noqa: E501
+            elems_b = [random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod)]  # noqa: E501
+        case 32:
+            elems_a = [random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod)]  # noqa: E501
+            elems_b = [random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod)]  # noqa: E501
+        case 16:
+            elems_a = [random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod)]  # noqa: E501
+            elems_b = [random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod),  # noqa: E501
+                       random.randrange(mod), random.randrange(mod), random.randrange(mod), random.randrange(mod)]  # noqa: E501
+
+    all_lanes = []
+    # We iterate from lane 0 to `256//size`.
+    # But our python elems_a array is inverted (index 0 is lane `256//size` in WDR)
+    # Thus `lane` must count down
+    for lane in range(256 // size - 1, -1, -1):
+        lane_results = []
+        lane_value = elems_b[lane]
+
+        for elem in range(256 // size):
+            # Perform a montgomery multiplication
+            c = montgomery_mul(elems_a[elem], lane_value, mod, mod_R, size)
+
+            # Double check the montgomery multiplication
+            # We can convert back into regular space by MontMul with 1
+            a_orig = montgomery_mul(elems_a[elem], 1, mod, mod_R, size)
+            lane_orig = montgomery_mul(lane_value, 1, mod, mod_R, size)
+            c_orig = (a_orig * lane_orig) % mod
+            c_recovered = montgomery_mul(c, 1, mod, mod_R, size)
+            assert c_orig == c_recovered
+
+            # fake wrap around
+            c = c & ((1 << size) - 1)
+            lane_results.append(c)
+
+        all_lanes.append(lane_results)
+
+    operation = "mulvlm"
+
+    txt_a = ""
+    txt_a += format_otbn_memory(convert_to_hex_string(elems_a, size),
+                                size, elems_a, f"vec{size}a", operation)
+
+    txt_b = ""
+    txt_b += format_otbn_memory(convert_to_hex_string(elems_b, size),
+                                size, elems_b, f"vec{size}b", operation)
+
+    txt_lane_res = ""
+    for index, lane in enumerate(all_lanes):
+        txt_lane_res += format_otbn_result(convert_to_hex_string(lane, size),
+                                           size, lane, f"{operation} index {index}")
+
+    # Combine modulus and Montgomery R constant into the MOD WSR
+    # For  16b: q @ [15:0], R @ [47:32]
+    # For  32b: q @ [31:0], R @ [63:32]
+    # For  64b: q @ [63:0], R @ [127:64]
+    # For 128b: q @ [127:0], R @ [255:128]
+    offset = 32 if (size == 16 or size == 32) else size
+    mod_WSR = ((mod_R & ((1 << size) - 1)) << offset) | (mod & ((1 << size) - 1))
+
+    txt_mod = format_otbn_memory(hex(mod_WSR)[2:].zfill(64),
+                                 size, [mod_R, mod], f"mod{size}", "mulvml. Combined [R, q]")
+    return txt_mod + txt_a + txt_b + txt_lane_res
 
 
 def bn_trn1(size: int) -> str:
@@ -642,15 +804,23 @@ if __name__ == "__main__":
         with open(f"{insn.__name__}-memory.{FILENEDING}", "w") as fd:
             fd.write(file)
 
-    # instructions with MOD parameter
+    # instructions with MOD parameter and precomputed Montgomery constant
     mods = [7583, 8380417, 8380417, 8380417]
+    mod_R = [16801, 4236238847, 16714476285912408063, 2984062896558332194971546556068519935]
     instructions = [bn_addvm,
-                    bn_subvm,
-                    bn_mulvm,
-                    bn_mulvml]
+                    bn_subvm]
     for insn in instructions:
         file = ""
         for index, size in enumerate(sizes):
             file += insn(size, mods[index])
+        with open(f"{insn.__name__}-memory.{FILENEDING}", "w") as fd:
+            fd.write(file)
+
+    instructions = [bn_mulvm,
+                    bn_mulvml]
+    for insn in instructions:
+        file = ""
+        for index, size in enumerate(sizes):
+            file += insn(size, mods[index], mod_R[index])
         with open(f"{insn.__name__}-memory.{FILENEDING}", "w") as fd:
             fd.write(file)
