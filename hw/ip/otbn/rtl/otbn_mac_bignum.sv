@@ -101,6 +101,12 @@ module otbn_mac_bignum
     MulOpq
   } mul_op_b_sel_e;
 
+  // Enum for value indexing
+  typedef enum logic {
+    ModVecElen16 = 1'b0,
+    ModVecElen32 = 1'b1
+  } mod_vec_elen_e;
+
   // Encoding generated with:
   // $ ./util/design/sparse-fsm-encode.py -d 3 -m 16 -n 8 \
   //     -s 5799399942 --language=sv
@@ -279,49 +285,47 @@ module otbn_mac_bignum
     assign mod_no_intg[i_word*32+:32] = ispr_mod_intg_blanked[i_word*39+:32];
   end
 
-  logic [QWLEN-1:0] all_mod_q [NELEN]; // TODO: only 16b and 32b are valid ELENs!
+  // We create both values (for 16b and 32b) and then select the correct one using the onehot
+  // elen signal. This signal contains also a 64b version but we only use the lower 2 bits.
+  // !! This requires the onehot encoding to place 16b or 32b always in these bits!
+  // TODO: Maybe refactor the onehot to clean this up. Occurs at multiple locations.
+  logic [QWLEN-1:0] all_mod_q [NELENMAC-1];
   logic [QWLEN-1:0] mod_q; // The Montgomery modulus q
-  logic [QWLEN-1:0] all_mod_R [NELEN]; // TODO: only 16b and 32b are valid ELENs!
+  logic [QWLEN-1:0] all_mod_R [NELENMAC-1];
   logic [QWLEN-1:0] mod_R; // The Montgomery R constant, R = (-q)^-1 mod 2^ELEN
 
   // The modulus and constant in stored in the MOD register at:
   // 16b: q @ [15:0], R @ [47:32]
   // 32b: q @ [31:0], R @ [63:32]
   // For the vectorized multiplications we have to replicate the constants
-  assign all_mod_q[VecElen16]  = {4{mod_no_intg[15:0]}};
-  assign all_mod_q[VecElen32]  = {2{mod_no_intg[31:0]}};
-  assign all_mod_q[VecElen64]  = '0; // This may not occur! TODO: Change to special ELEN type
-  assign all_mod_q[VecElen128] = '0; // This may not occur! TODO: Change to special ELEN type
-  assign all_mod_q[VecElen256] = '0; // This may not occur! TODO: Change to special ELEN type
+  assign all_mod_q[ModVecElen16]  = {4{mod_no_intg[15:0]}};
+  assign all_mod_q[ModVecElen32]  = {2{mod_no_intg[31:0]}};
 
-  assign all_mod_R[VecElen16]  = {4{mod_no_intg[47:32]}};
-  assign all_mod_R[VecElen32]  = {2{mod_no_intg[63:32]}};
-  assign all_mod_R[VecElen64]  = '0; // This may not occur! TODO: Change to special ELEN type
-  assign all_mod_R[VecElen128] = '0; // This may not occur! TODO: Change to special ELEN type
-  assign all_mod_R[VecElen256] = '0; // This may not occur! TODO: Change to special ELEN type
+  assign all_mod_R[ModVecElen16]  = {4{mod_no_intg[47:32]}};
+  assign all_mod_R[ModVecElen32]  = {2{mod_no_intg[63:32]}};
 
   logic [WLEN-1-64:0] unused_mod;
   assign unused_mod = ~mod_no_intg[WLEN-1:64];
 
   prim_onehot_mux #(
     .Width(QWLEN),
-    .Inputs(NELEN)
-    ) u_mod_q_value_mux (
+    .Inputs(NELENMAC-1)
+  ) u_mod_q_value_mux (
     .clk_i,
     .rst_ni,
     .in_i  (all_mod_q),
-    .sel_i (mac_predec_bignum_i.vec_elen_onehot),
+    .sel_i (mac_predec_bignum_i.vec_elen_onehot[1:0]),
     .out_o (mod_q)
   );
 
-    prim_onehot_mux #(
+  prim_onehot_mux #(
     .Width(QWLEN),
-    .Inputs(NELEN)
-    ) u_mod_R_value_mux (
+    .Inputs(NELENMAC-1)
+  ) u_mod_R_value_mux (
     .clk_i,
     .rst_ni,
     .in_i  (all_mod_R),
-    .sel_i (mac_predec_bignum_i.vec_elen_onehot),
+    .sel_i (mac_predec_bignum_i.vec_elen_onehot[1:0]),
     .out_o (mod_R)
   );
 
@@ -335,25 +339,22 @@ module otbn_mac_bignum
   logic [QWLEN-1:0] qword_a;
   logic [QWLEN-1:0] qword_b;
   logic [QWLEN-1:0] qword_b_lane;
-  logic [QWLEN-1:0] all_qword_b [NELEN];
+  logic [QWLEN-1:0] all_qword_b [NELENMAC-1];
 
   // pick the lane index and replicate
   always_comb begin // TODO: make bound check for lane_index
-    all_qword_b[VecElen16]  = {4{operand_b_blanked[operation_i.lane_index*16+:16]}};
-    all_qword_b[VecElen32]  = {2{operand_b_blanked[operation_i.lane_index*32+:32]}};
-    all_qword_b[VecElen64]  = '0; // TODO: this may never be the case
-    all_qword_b[VecElen128] = '0; // TODO: this may never be the case
-    all_qword_b[VecElen256] = '0; // TODO: this may never be the case
+    all_qword_b[ModVecElen16]  = {4{operand_b_blanked[operation_i.lane_index*16+:16]}};
+    all_qword_b[ModVecElen32]  = {2{operand_b_blanked[operation_i.lane_index*32+:32]}};
   end
 
   prim_onehot_mux #(
     .Width(QWLEN),
-    .Inputs(NELEN)
+    .Inputs(NELENMAC-1)
   ) u_lane_mux (
     .clk_i ,
     .rst_ni,
     .in_i  (all_qword_b),
-    .sel_i (mac_predec_bignum_i.vec_elen_onehot),
+    .sel_i (mac_predec_bignum_i.vec_elen_onehot[1:0]),
     .out_o (qword_b_lane)
   );
 
@@ -401,7 +402,10 @@ module otbn_mac_bignum
 
   // Multiplier is fully blanked. The inputs do not have to be blanked.
   otbn_vec_multiplier u_vec_multiplier (
+    .operand_a_i(mul_op_a),
+    .operand_b_i(mul_op_b),
     .elen_ctrl_i(mac_predec_bignum_i.vec_mul_elen_ctrl),
+    .result_o   (mul_res)
   );
 
   ///////////////////////////////////////////
@@ -409,7 +413,7 @@ module otbn_mac_bignum
   ///////////////////////////////////////////
   logic             mul_mod_en;
   logic [HWLEN-1:0] mul_res_mod;
-  logic [QWLEN-1:0] all_tmp_value [NELEN]; // TODO: only 16b and 32b are valid ELENs!
+  logic [QWLEN-1:0] all_tmp_value [NELENMAC-1];
   logic [QWLEN-1:0] tmp_value;
 
   // SEC_CM: DATA_REG_SW.SCA
@@ -432,21 +436,18 @@ module otbn_mac_bignum
     endcase
   end
 
-  assign all_tmp_value[VecElen16]  = {mul_res_mod[16*6+:16], mul_res_mod[16*4+:16],
-                                      mul_res_mod[16*2+:16], mul_res_mod[16*0+:16]};
-  assign all_tmp_value[VecElen32]  = {mul_res_mod[32*2+:32], mul_res_mod[32*0+:32]};
-  assign all_tmp_value[VecElen64]  = '0; // This may not occur! TODO: Change to special ELEN type
-  assign all_tmp_value[VecElen128] = '0; // This may not occur! TODO: Change to special ELEN type
-  assign all_tmp_value[VecElen256] = '0; // This may not occur! TODO: Change to special ELEN type
+  assign all_tmp_value[ModVecElen16]  = {mul_res_mod[16*6+:16], mul_res_mod[16*4+:16],
+                                         mul_res_mod[16*2+:16], mul_res_mod[16*0+:16]};
+  assign all_tmp_value[ModVecElen32]  = {mul_res_mod[32*2+:32], mul_res_mod[32*0+:32]};
 
   prim_onehot_mux #(
     .Width(QWLEN),
-    .Inputs(NELEN)
+    .Inputs(NELENMAC-1)
   ) u_tmp_value_mux (
     .clk_i ,
     .rst_ni,
     .in_i  (all_tmp_value),
-    .sel_i (mac_predec_bignum_i.vec_elen_onehot),
+    .sel_i (mac_predec_bignum_i.vec_elen_onehot[1:0]),
     .out_o (tmp_value)
   );
 
@@ -460,7 +461,7 @@ module otbn_mac_bignum
 
   // Truncating and blanking for vectorized multiplication without modulo reduction
   logic [HWLEN-1:0] mul_res_blanked;
-  logic [QWLEN-1:0] all_mul_res_merger [NELEN];
+  logic [QWLEN-1:0] all_mul_res_merger [NELENMAC-1];
   logic [QWLEN-1:0] mul_res_merger;
 
   // SEC_CM: DATA_REG_SW.SCA
@@ -470,21 +471,18 @@ module otbn_mac_bignum
     .out_o(mul_res_blanked)
   );
 
-  assign all_mul_res_merger[VecElen16]  = {mul_res_blanked[16*6+:16], mul_res_blanked[16*4+:16],
-                                           mul_res_blanked[16*2+:16], mul_res_blanked[16*0+:16]};
-  assign all_mul_res_merger[VecElen32]  = {mul_res_blanked[32*2+:32], mul_res_blanked[32*0+:32]};
-  assign all_mul_res_merger[VecElen64]  = '0; // This may not occur! TODO: Change to spec. ELEN type
-  assign all_mul_res_merger[VecElen128] = '0; // This may not occur! TODO: Change to spec. ELEN type
-  assign all_mul_res_merger[VecElen256] = '0; // This may not occur! TODO: Change to spec. ELEN type
+  assign all_mul_res_merger[ModVecElen16]  = {mul_res_blanked[16*6+:16], mul_res_blanked[16*4+:16],
+                                              mul_res_blanked[16*2+:16], mul_res_blanked[16*0+:16]};
+  assign all_mul_res_merger[ModVecElen32]  = {mul_res_blanked[32*2+:32], mul_res_blanked[32*0+:32]};
 
   prim_onehot_mux #(
     .Width(QWLEN),
-    .Inputs(NELEN)
+    .Inputs(NELENMAC-1)
   ) u_mul_merger_value_mux (
     .clk_i ,
     .rst_ni,
     .in_i  (all_mul_res_merger),
-    .sel_i (mac_predec_bignum_i.vec_elen_onehot),
+    .sel_i (mac_predec_bignum_i.vec_elen_onehot[1:0]),
     .out_o (mul_res_merger)
   );
 
@@ -587,7 +585,7 @@ module otbn_mac_bignum
   /////////////////////////////////////////////
   logic             add_mod_en;
   logic [WLEN-1:0]  adder_result_mod;
-  logic [QWLEN-1:0] all_montg_r [NELEN]; // TODO: only 16b and 32b are valid ELENs!
+  logic [QWLEN-1:0] all_montg_r [NELENMAC-1];
   logic [QWLEN-1:0] montg_r;
 
   prim_blanker #(.Width(WLEN)) u_add_mod_blanker (
@@ -599,12 +597,9 @@ module otbn_mac_bignum
   // Montgomery upper bit selection
   // Take only the upper ELEN bits of the addition.
   // The result is "r" of the montgomery algorithm
-  assign all_montg_r[VecElen16]  = {adder_result_mod[16*7+:16], adder_result_mod[16*5+:16],
+  assign all_montg_r[ModVecElen16]  = {adder_result_mod[16*7+:16], adder_result_mod[16*5+:16],
                                     adder_result_mod[16*3+:16], adder_result_mod[16*1+:16]};
-  assign all_montg_r[VecElen32]  = {adder_result_mod[32*3+:32], adder_result_mod[32*1+:32]};
-  assign all_montg_r[VecElen64]  = '0; // This may not occur! TODO: Change to special ELEN type
-  assign all_montg_r[VecElen128] = '0; // This may not occur! TODO: Change to special ELEN type
-  assign all_montg_r[VecElen256] = '0; // This may not occur! TODO: Change to special ELEN type
+  assign all_montg_r[ModVecElen32]  = {adder_result_mod[32*3+:32], adder_result_mod[32*1+:32]};
 
   logic [128+16+16-1:0] unused_adder_result_mod;
   assign unused_adder_result_mod = ~{adder_result_mod[255:128],
@@ -613,12 +608,12 @@ module otbn_mac_bignum
 
   prim_onehot_mux #(
     .Width(QWLEN),
-    .Inputs(NELEN)
+    .Inputs(NELENMAC-1)
   ) u_montg_r_value_mux (
     .clk_i,
     .rst_ni,
     .in_i  (all_montg_r),
-    .sel_i (mac_predec_bignum_i.vec_elen_onehot),
+    .sel_i (mac_predec_bignum_i.vec_elen_onehot[1:0]),
     .out_o (montg_r)
   );
 
@@ -628,7 +623,7 @@ module otbn_mac_bignum
   logic [QWLEN-1:0] sub_subtrahend;
   logic [QWLEN-1:0] sub_difference;
   logic [3:0]       sub_carries_out;
-  logic [QWLEN-1:0] all_montg_r_cor [NELEN]; // TODO: only 16b and 32b are valid ELENs!
+  logic [QWLEN-1:0] all_montg_r_cor [NELENMAC-1];
   logic [QWLEN-1:0] montg_r_cor;
 
   assign sub_minuend    = montg_r;
@@ -638,37 +633,34 @@ module otbn_mac_bignum
   otbn_vec_adder #(
     .LVLEN(QWLEN)
   ) u_vec_subtractor (
-  .operand_a_i       (sub_minuend),
-  .operand_b_i       (sub_subtrahend),
-  .operand_b_invert_i(1'b1),
-  .carries_in_i      (4'b1111),
-  .use_ext_carry_i   (mac_predec_bignum_i.vec_sub_carry_sel),
-  .sum_o             (sub_difference),
-  .carries_out_o     (sub_carries_out)
+    .operand_a_i       (sub_minuend),
+    .operand_b_i       (sub_subtrahend),
+    .operand_b_invert_i(1'b1),
+    .carries_in_i      (4'b1111),
+    .use_ext_carry_i   (mac_predec_bignum_i.vec_sub_carry_sel),
+    .sum_o             (sub_difference),
+    .carries_out_o     (sub_carries_out)
   );
 
   // Decide with carry bit.
   // If subtraction generates carry: r - q >= 0 hence r >= q
-  assign all_montg_r_cor[VecElen16] =
+  assign all_montg_r_cor[ModVecElen16] =
                            {sub_carries_out[3] ? sub_difference[16*3+:16] : montg_r[16*3+:16],
                             sub_carries_out[2] ? sub_difference[16*2+:16] : montg_r[16*2+:16],
                             sub_carries_out[1] ? sub_difference[16*1+:16] : montg_r[16*1+:16],
                             sub_carries_out[0] ? sub_difference[16*0+:16] : montg_r[16*0+:16]};
-  assign all_montg_r_cor[VecElen32] =
+  assign all_montg_r_cor[ModVecElen32] =
                            {sub_carries_out[3] ? sub_difference[32*1+:32] : montg_r[32*1+:32],
                             sub_carries_out[1] ? sub_difference[32*0+:32] : montg_r[32*0+:32]};
-  assign all_montg_r_cor[VecElen64]  = '0; // This may not occur! TODO: Change to special ELEN type
-  assign all_montg_r_cor[VecElen128] = '0; // This may not occur! TODO: Change to special ELEN type
-  assign all_montg_r_cor[VecElen256] = '0; // This may not occur! TODO: Change to special ELEN type
 
   prim_onehot_mux #(
     .Width(QWLEN),
-    .Inputs(NELEN)
+    .Inputs(NELENMAC-1)
   ) u_montg_r_cor_value_mux (
     .clk_i,
     .rst_ni,
     .in_i  (all_montg_r_cor),
-    .sel_i (mac_predec_bignum_i.vec_elen_onehot),
+    .sel_i (mac_predec_bignum_i.vec_elen_onehot[1:0]),
     .out_o (montg_r_cor)
   );
 
@@ -1100,15 +1092,16 @@ module otbn_mac_bignum
   //////////////////////
   // Redundancy check //
   //////////////////////
-  logic             expected_op_en;
-  logic [NELEN-1:0] expected_vec_elen_onehot;
-  mac_mul_type_e    expected_mul_type;
-  logic             expected_is_mod;
-  logic             expected_is_vec;
-  logic             expected_acc_add_en;
-  // TODO: decode these two also in otbn_decoder.sv
-  // logic [NELEN-1:0] expected_vec_adder_carry_sel;
-  // logic [3:0]       expected_vec_sub_carry_sel;
+  logic                expected_op_en;
+  logic [NELENMAC-1:0] expected_vec_elen_onehot;
+  mac_mul_type_e       expected_mul_type;
+  logic                expected_is_mod;
+  logic                expected_is_vec;
+  logic                expected_acc_add_en;
+  // TODO: decode these also in otbn_decoder.sv
+  // logic [NELENMAC-1:0] expected_vec_adder_carry_sel;
+  // logic [3:0]          expected_vec_sub_carry_sel;
+  // logic [NELENMAC-1:0] expected_vec_mul_elen_ctrl;
 
   // SEC_CM: CTRL.REDUN
   assign expected_op_en           = mac_en_i;
