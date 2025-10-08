@@ -25,9 +25,9 @@ module otbn_vec_multiplier_tb
   );
 
   // Signals to the dut
-  logic [63:0]      operand_a, operand_b;
-  elen_bignum_e     elen;
-  logic [NELEN-1:0] elen_onehot;
+  logic [63:0]  operand_a, operand_b;
+  elen_bignum_e elen;
+  logic [2:0]   elen_ctrl;
 
   // Signals from the dut
   logic [127:0] result;
@@ -37,12 +37,10 @@ module otbn_vec_multiplier_tb
   ///////////////
   // The tested module must be named "dut" (see run.tcl)
   otbn_vec_multiplier dut (
-    .clk_i        (clk),
-    .rst_ni       (rst_n),
-    .operand_a_i  (operand_a),
-    .operand_b_i  (operand_b),
-    .elen_onehot_i(elen_onehot),
-    .result_o     (result)
+    .operand_a_i(operand_a),
+    .operand_b_i(operand_b),
+    .elen_ctrl_i(elen_ctrl),
+    .result_o   (result)
   );
 
   ///////////////
@@ -60,13 +58,14 @@ module otbn_vec_multiplier_tb
 
   integer n_errs, n_checks, all_stim_applied;
 
-  prim_onehot_enc #(
-    .OneHotWidth (NELEN)
-  ) u_elen_onehot (
-    .in_i (elen),
-    .en_i ('1), // always enable
-    .out_o(elen_onehot)
-  );
+  always_comb begin
+    unique case (elen)
+      VecElen16: elen_ctrl = 3'b001;
+      VecElen32: elen_ctrl = 3'b011;
+      VecElen64: elen_ctrl = 3'b111;
+      default:   elen_ctrl = 3'b000;
+    endcase
+  end
 
   initial begin : application_block
     response_t gold_response;
