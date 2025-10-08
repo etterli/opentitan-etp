@@ -206,8 +206,8 @@ def upper_d_bits(value: int, d: int) -> int:
     return (value & (((1 << d) - 1) << d)) >> d
 
 
-def montgomery_mul(a_, b_, q, R, size):
-    '''Performs a Montgomery multiplication. The inputs a_ and b_ are in Montgomery space.
+def montgomery_mul(a, b, q, R, size):
+    '''Performs a Montgomery multiplication. The inputs a and b are in Montgomery space.
     The result is also in Montgomery space.
 
     Algorithm (where []_d are the lower d bits, []^d are the higher d bits)
@@ -216,7 +216,7 @@ def montgomery_mul(a_, b_, q, R, size):
            return r - q
        return r
     '''
-    reg_c = a_ * b_
+    reg_c = a * b
     reg_tmp = lower_d_bits(reg_c, size)
     reg_tmp = lower_d_bits(reg_tmp * R, size)
     r = upper_d_bits(reg_c + reg_tmp * q, size)
